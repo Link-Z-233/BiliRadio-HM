@@ -663,7 +663,9 @@ export class PlayerController {
       this.mediaSession.startBackground();
       // 播放历史：仅在 AVPlayer 真实出声（playing，含暂停后恢复）时记录
       if (this.currentIndex >= 0 && this.currentIndex < this.playlist.length) {
-        this.recordOnPlaying(this.playlist[this.currentIndex]);
+        const playedItem: BiliVideo = this.playlist[this.currentIndex];
+        this.markSessionPlayed(playedItem);
+        this.recordOnPlaying(playedItem);
       }
       this.setPlaying(true);
     } else if (state === 'paused') {
@@ -731,6 +733,16 @@ export class PlayerController {
     if (lastIndex >= 0 &&
       ((this.playMode === PlayMode.SEQUENTIAL && this.currentIndex >= lastIndex) ||
         (this.playMode === PlayMode.REVERSE && this.currentIndex <= 0))) {
+      this.statusMsg = '播放结束';
+      this.currentItemEnded = true;
+      this.playIntent = false;
+      return;
+    }
+    // v0.8-part1 FR-004：随机模式全完播停止（US7 同款路径）——指定下一首为空且歌单内全部条目
+    // 完播时不再自动连播；手动 next 维持回退（randomIndex 回退重播当前），不自动开启新一轮重抽
+    if (this.playMode === PlayMode.RANDOM && this.designatedNextQueue.length === 0 &&
+      this.isAllEntriesCompleted()) {
+      Logger.log('player', 'random all completed stop', `bvid=${this.currentBvid()}`);
       this.statusMsg = '播放结束';
       this.currentItemEnded = true;
       this.playIntent = false;
@@ -933,6 +945,8 @@ export class PlayerController {
       this.playlistVersion++;
       this.shuffleHistory = [];
       this.forwardHistory = [];
+      this.sessionPlayedSet.clear();
+      this.designatedNextQueue = [];
       this.currentIndex = -1;
       this.isPrepared = false;
       this.setPlaying(false);
@@ -957,21 +971,30 @@ export class PlayerController {
 
     // 歌单非空：追加到末尾，不打断当前播放；insertAfterCurrent 时插到当前播放条目
     // 游程（分P 组整组口径）之后，currentIndex 与播放状态零改动
-    const origLen: number = this.playlist.length;
-    let insertAt: number = origLen;
+    let insertAt: number = this.playlist.length;
+    let afterCurrent: boolean = false;
     if (insertAfterCurrent && this.currentIndex >= 0) {
       const groups: number[][] = this.getQueueEntryGroups();
       for (let i = 0; i < groups.length; i++) {
         if (groups[i].indexOf(this.currentIndex) >= 0) {
           insertAt = groups[i][groups[i].length - 1] + 1;
+          afterCurrent = true;
           break;
         }
       }
     }
     this.playlist = this.playlist.slice(0, insertAt).concat(toAdd, this.playlist.slice(insertAt));
     this.playlistVersion++;
+    // 指定下一首登记（v0.8-part1 FR-005）：实际插到当前条目游程之后（afterCurrent，
+    // 含游程在队尾、insertAt 恰等于原长度的场景）时 toAdd 复合键按插入顺序入 FIFO；
+    // 命中去重项不在 toAdd、非 insertAfterCurrent 的纯追加队尾路径不登记
+    if (afterCurrent) {
+      for (let i = 0; i < toAdd.length; i++) {
+        this.designatedNextQueue.push(BiliVideo.itemKeyOf(toAdd[i].bvid, toAdd[i].page));
+      }
+    }
     AppStore.savePlaylistFile(this.playlist, this.currentIndex, this.currentTime, this.currentQualityCode);
-    let msg: string = insertAt < origLen
+    let msg: string = afterCurrent
       ? `已插入 ${toAdd.length} 首到当前播放之后`
       : `已追加 ${toAdd.length} 首到歌单末尾`;
     if (skipped > 0) {
@@ -1235,9 +1258,11 @@ export class PlayerController {
     }
   }
 
-  // 随机条目级抽取（v0.4-queue-multi-p-item plan D8）：优先级 = 组内连播（当前为分P 且扁平下一条
-  // 同 bvid 分P → currentIndex+1）> 条目级随机（非当前条目游程等概率，抽中取其最小页下标起播）>
-  // 回退当前条目（重播/续播语义随 playIndex）；prev() 随机回溯与轨迹键不动
+  // 随机条目级抽取（v0.4-queue-multi-p-item plan D8 + v0.8-part1 分层排除）：优先级 = 组内连播
+  // （当前为分P 且扁平下一条同 bvid 分P → currentIndex+1）> 指定下一首（FIFO 弹出校验跳播）
+  // > 排除式条目级随机（候选 = 条目组 − 会话已播 bvid − 完播 bvid − 当前组，等概率，
+  // 抽中取其最小页下标起播）> 回退当前条目（重播/续播语义随 playIndex）；
+  // prev() 随机回溯与轨迹键不动
   private randomIndex(): number {
     if (this.currentIndex >= 0 && this.currentIndex + 1 < this.playlist.length) {
       const cur: BiliVideo = this.playlist[this.currentIndex];
@@ -1246,12 +1271,22 @@ export class PlayerController {
         return this.currentIndex + 1;
       }
     }
-    const groups: number[][] = this.getQueueEntryGroups();
-    const candidates: number[][] = [];
-    for (let g = 0; g < groups.length; g++) {
-      if (groups[g].indexOf(this.currentIndex) < 0) {
-        candidates.push(groups[g]);
+    // 指定下一首消费（v0.8-part1 FR-006）：组内连播之后、随机抽取之前，弹出队首复合键，
+    // 在歌单则跳播该下标（多P 插入条目由组内连播自然接力后续分P），不在（已移除）则丢弃续弹
+    while (this.designatedNextQueue.length > 0) {
+      const key: string = this.designatedNextQueue.shift() ?? '';
+      const idx: number = this.indexOfKey(key);
+      if (idx >= 0) {
+        Logger.log('player', 'designated next play', `key=${key} index=${idx}`);
+        return idx;
       }
+    }
+    const groups: number[][] = this.getQueueEntryGroups();
+    let candidates: number[][] = this.filterRandomCandidates(groups);
+    if (candidates.length === 0 && this.hasUncompletedEntry(groups)) {
+      this.sessionPlayedSet.clear();
+      Logger.log('player', 'random redraw', `entries=${groups.length}`);
+      candidates = this.filterRandomCandidates(groups);
     }
     if (candidates.length === 0) {
       return this.currentIndex >= 0 ? this.currentIndex : 0;
@@ -1266,8 +1301,41 @@ export class PlayerController {
     return target;
   }
 
+  // 随机候选构建（v0.8-part1 FR-001）：条目组 − 会话已播 bvid − 完播 bvid − 当前组；纯过滤
+  private filterRandomCandidates(groups: number[][]): number[][] {
+    const candidates: number[][] = [];
+    for (let g = 0; g < groups.length; g++) {
+      if (groups[g].indexOf(this.currentIndex) >= 0) {
+        continue;
+      }
+      const bvid: string = this.playlist[groups[g][0]].bvid;
+      if (this.sessionPlayedSet.has(bvid) || this.isEntryCompleted(bvid)) {
+        continue;
+      }
+      candidates.push(groups[g]);
+    }
+    return candidates;
+  }
+
+  // 未完播候选存在性（v0.8-part1 FR-003）：非当前组中存在未完播条目 → 候选耗尽后清会话已播标记重抽
+  private hasUncompletedEntry(groups: number[][]): boolean {
+    for (let g = 0; g < groups.length; g++) {
+      if (groups[g].indexOf(this.currentIndex) >= 0) {
+        continue;
+      }
+      if (!this.isEntryCompleted(this.playlist[groups[g][0]].bvid)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private shuffleHistory: string[] = [];
   private forwardHistory: string[] = [];
+  // —— 随机分层排除（v0.8-part1）：会话已播集（bvid 条目级，'playing' 出声写入）与
+  // 指定下一首队列（复合键 FIFO，源页 insertAfterCurrent 插入登记），均不持久化 ——
+  private sessionPlayedSet: Set<string> = new Set<string>();
+  private designatedNextQueue: string[] = [];
 
   // 复合键检索（D6：键经 BiliVideo.itemKeyOf 合成，占位 page 0≡1 归一化比较；禁各处手拼）
   private indexOfKey(key: string): number {
@@ -1931,6 +1999,22 @@ export class PlayerController {
     this.savePlayHistoryFileAsync();
   }
 
+  // 会话已播标记 + 指定下一首消费（v0.8-part1 FR-002/FR-007）：AVPlayer 'playing' 出声点唯一钩子，
+  // 覆盖全部起播来源；当前条目 bvid 入会话已播集（条目级），当前复合键命中 FIFO 视为消费剔除
+  // （手动点播 FIFO 条目不再重复兑现）；幂等
+  private markSessionPlayed(item: BiliVideo): void {
+    if (item.bvid === '') {
+      return;
+    }
+    this.sessionPlayedSet.add(item.bvid);
+    const key: string = BiliVideo.itemKeyOf(item.bvid, item.page);
+    const qi: number = this.designatedNextQueue.indexOf(key);
+    if (qi >= 0) {
+      this.designatedNextQueue.splice(qi, 1);
+      Logger.log('player', 'designated next consumed on play', `key=${key}`);
+    }
+  }
+
   // 播放历史 upsert（plan R3，play-history-progress 最关键修正；复合键分P 粒度）：
   // 命中同 (bvid,page) 旧条目时**保留** progress/duration/cid（续播进度不被清零），仅刷新
   // viewAt(秒)/title/cover/ownerName/sourceType 后置顶；未命中才新建（progress=0）。
@@ -2188,6 +2272,13 @@ export class PlayerController {
     }
     this.playlist = kept;
     this.playlistVersion++;
+    // 指定下一首剔除（v0.8-part1 FR-007）：被移复合键同步出队；
+    // 其余移除路径（unfavorite 直删等）由消费时 indexOfKey 校验兜底
+    for (let i = this.designatedNextQueue.length - 1; i >= 0; i--) {
+      if (keys.indexOf(this.designatedNextQueue[i]) >= 0) {
+        this.designatedNextQueue.splice(i, 1);
+      }
+    }
     if (this.playlist.length === 0) {
       this.currentIndex = -1;
       this.isPrepared = false;
@@ -2308,6 +2399,34 @@ export class PlayerController {
   isPartPlayed(bvid: string, page: number): boolean {
     const idx: number = this.indexOfPlayHistory(bvid, page);
     return idx >= 0 && this.playHistory[idx].progress === -1;
+  }
+
+  // 条目级完播派生判定（v0.8-part1 plan D3，零存储）：歌单内该 bvid 的全部分P
+  // 在 playHistory 中 progress=-1 才算完播；纯查询零副作用；歌单无该 bvid 返回 false
+  private isEntryCompleted(bvid: string): boolean {
+    let found: boolean = false;
+    for (let i = 0; i < this.playlist.length; i++) {
+      if (this.playlist[i].bvid !== bvid) {
+        continue;
+      }
+      found = true;
+      if (!this.isPartPlayed(bvid, this.playlist[i].page)) {
+        return false;
+      }
+    }
+    return found;
+  }
+
+  // 全完播判定（v0.8-part1 plan D5）：歌单内全部条目游程均完播（含当前条目组）；
+  // 空歌单返回 false（无从判定，不触发停止路径）
+  private isAllEntriesCompleted(): boolean {
+    const groups: number[][] = this.getQueueEntryGroups();
+    for (let g = 0; g < groups.length; g++) {
+      if (!this.isEntryCompleted(this.playlist[groups[g][0]].bvid)) {
+        return false;
+      }
+    }
+    return groups.length > 0;
   }
 
   // 可清理集合：playlist 中已听完、失效（X，v0.7-part3 追加）或异常标记的全部复合键，含命中的当前播放条目

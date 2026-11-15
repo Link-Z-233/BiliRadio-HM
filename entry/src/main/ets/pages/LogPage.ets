@@ -120,10 +120,13 @@ export struct LogPage {
     return `${d.getFullYear()}${mo}${day}_${hh}${mm}${ss}`;
   }
 
-  // 'error' → 错误，其余（'net'）→ 网络
+  // 'error' → 错误，'player' → 播放，其余（'net'）→ 网络
   private categoryLabel(category: string): string {
     if (category === 'error') {
       return '错误';
+    }
+    if (category === 'player') {
+      return '播放';
     }
     return '网络';
   }

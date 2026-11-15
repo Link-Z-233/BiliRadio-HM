@@ -163,3 +163,11 @@
 - v0.7-part4-special-marks R2（build-only，真机前停·未部署）：
   - 跨模型复用 @Builder 的结构化类型坑：QueueSheet/HistorySheet 各自实现 specialMarkPrefix 时形参照抄 BiliVideo，但 HistorySheet 行数据源是 HistoryRow.latest（PlayHistoryItem）——两模型四个标记字段同构也不行，arkts-no-structural-typing + assignability 双报错；复制同构 builder 到新宿主时先核行数据源的真实模型类型，形参随宿主数据源改（builder 只读标记四字段，改形参类型即最小修复）
 
+- v0.8-part1-random-play-next（build-only，真机前停·未部署）：
+  - `devecocli check arkts <目标文件>` 单文件预检会把目标文件依赖链上全部文件的既有告警一并带出（本轮目标文件零告警，仍报 37 条 WbiSigner/BiliService/FileUtil 等依赖文件告警）——单文件预检通过口径 = 目标文件自身零错误零告警，依赖文件告警与 `devecocli build` 全量告警同口径处理（hunk 交叉比对判既有），勿因依赖告警返工
+
+- v0.8-part1 真机 UI 验证补批（build+ui，真机无线部署）：
+  - 屏幕常亮要求（用户指令）：UI 验证开始前打开屏幕常亮（设置→显示和亮度→休眠调长，或开发者选项「不锁定屏幕」），测试完成后关闭恢复默认——测试中途超时锁屏会打断验证序列（本轮实测：翻日志取证时设备锁屏，恢复需 `hdc shell power-shell wakeup` + `setmode 602` + 上滑解锁三步）
+  - 应用日志取证直读落盘文件，优先于 UI 翻日志页：`hdc shell "grep -n '<关键字>' /data/app/el2/100/base/com.biliradio.app/haps/entry/files/biliradio_log.txt"` 一条命令定位全部目标行；UI 翻页一次一屏（每屏 10–30s），跨多屏取证成本高一个数量级
+  - UIAbilityContext.filesDir 是 HAP 级路径 `haps/entry/files/`，不是应用级 `base/<bundle>/files/`（后者只有 hiappevent）——按应用级目录找文件会误判「落盘失效」；调试模式开启时 Logger 双写 hilog（info 级），但 hilog 缓冲区滚动快，历史取证以落盘文件为准
+
