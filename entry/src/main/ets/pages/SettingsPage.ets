@@ -15,7 +15,8 @@ import { fileIo as fs, fileUri, picker } from '@kit.CoreFileKit';
 import { Subscription } from '../model/Subscription';
 import { SubscriptionStore, ImportResult } from '../service/SubscriptionStore';
 import { SettingsGroup } from '../component/SettingsGroup';
-import { SettingsRow } from '../component/SettingsRow';
+import { ListRow } from '../component/ListRow';
+import { OptionSheet } from '../component/OptionSheet';
 import { Constants } from '../service/Constants';
 import { registerSettingsBack } from '../service/BackHandler';
 import { connectBool, connectNum, connectStr, NumState, StrState } from '../service/V2State';
@@ -24,7 +25,7 @@ import { AudioQuality, QualityTier } from '../model/AudioQuality';
 
 const QR_CANVAS_SIZE: number = 280;
 
-// 设置页（US8 HarmonyOS 系统风格重写）：大标题 + 分组卡片（SettingsGroup/SettingsRow），
+// 设置页（US8 HarmonyOS 系统风格重写）：大标题 + 分组卡片（SettingsGroup/ListRow），
 // 登录 / 播放设置 / 外观（含主题色板）/ 播放历史入口 / 日志 / 关于功能全保留；
 // Index 树内层级承载（设置层，导航+胶囊之上、播放浮层之下），历史面板为 Index L4 独立层
 @ComponentV2
@@ -61,6 +62,8 @@ export struct SettingsPage {
   // 单集插入位置（US3）：true=下一首播放 false=队列末播放（默认），仅源页单击入队路径生效
   @Local singleInsertNext: boolean = false;
   @Local showSingleInsertSheet: boolean = false;
+  // 订阅管理动作弹窗（v0.8-part2 US2）：系统组合并行触发，选项分发导出/导入
+  @Local showSubManageSheet: boolean = false;
   // 外观三态选中态（0=跟随系统 1=浅色 2=深色）：由 Appearance 写全局键驱动刷新
   @Local colorModeSetting: NumState =
     connectNum(Constants.AS_COLOR_MODE_SETTING, Appearance.MODE_FOLLOW_SYSTEM);
@@ -115,12 +118,20 @@ export struct SettingsPage {
     // debugMode 开关显示：仅读 AppStore 供 UI；Logger 恢复与启动提醒已前移 Index 冷启动链路（v0.4-Part1-ux-fixes US10）
     this.debugModeOn = AppStore.getNumber(Constants.KEY_DEBUG_MODE, 0) === 1;
     registerSettingsBack((): boolean => {
+      if (this.showSubManageSheet) {
+        this.showSubManageSheet = false;
+        return true;
+      }
       if (this.showQualitySheet) {
         this.showQualitySheet = false;
         return true;
       }
       if (this.showSingleInsertSheet) {
         this.showSingleInsertSheet = false;
+        return true;
+      }
+      if (this.showAbout) {
+        this.showAbout = false;
         return true;
       }
       return false;
@@ -669,6 +680,7 @@ export struct SettingsPage {
     }
     .width(32)
     .height(32)
+    .layoutWeight(1)
     .borderRadius(Constants.TOKEN_RADIUS_L)
     .justifyContent(FlexAlign.Center)
     .border({
@@ -860,24 +872,6 @@ export struct SettingsPage {
   @Builder
   aboutSheet() {
     Column() {
-      Row() {
-        Blank()
-        Button('完成')
-          .height(30)
-          .padding({ left: Constants.TOKEN_SPACE_M, right: Constants.TOKEN_SPACE_M })
-          .backgroundColor($r('app.color.btn_glass'))
-          .backdropBlur(Constants.GLASS_BLUR)
-          .border({ width: 1, color: $r('app.color.btn_border') })
-          .fontColor(this.textPrimary())
-          .borderRadius(15)
-          .fontSize(Constants.TOKEN_FONT_BODY_S)
-          .onClick(() => {
-            this.showAbout = false;
-          })
-      }
-      .width('100%')
-      .padding({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_S, top: Constants.TOKEN_SPACE_S, bottom: Constants.TOKEN_SPACE_XS })
-
       Scroll() {
         Column() {
           Image($r('app.media.startIcon'))
@@ -890,7 +884,7 @@ export struct SettingsPage {
             })
 
           if (this.debugModeOn) {
-            SettingsRow({
+            ListRow({
               title: '调试模式',
               subtitle: '开启后日志同步写入系统 hilog',
               showToggle: true,
@@ -913,7 +907,7 @@ export struct SettingsPage {
             .fontColor(this.textSecondary())
             .margin({ top: Constants.TOKEN_SPACE_XS })
 
-          Text('把 B 站视频当播客听的鸿蒙音频应用：只取声音，不亮屏幕。订阅 UP 主、收藏夹、合集、系列，新视频自动标 NEW，一键入队；亦可通过粘贴链接或 BV 号手动添加。')
+          Text('把 B 站视频当播客听的鸿蒙音频应用：只取声音，不亮屏幕。订阅 UP 主、收藏夹、合集、系列，更新提醒，一键入队；亦可通过分享到应用快捷添加。')
             .fontSize(Constants.TOKEN_FONT_BODY)
             .fontColor(this.textSecondary())
             .lineHeight(20)
@@ -934,11 +928,11 @@ export struct SettingsPage {
             .textAlign(TextAlign.Start)
 
           Column({ space: Constants.TOKEN_SPACE_10 }) {
-            this.aboutFeature('订阅追更：UP 主 / 收藏夹 / 合集 / 系列四类源，新视频自动标 NEW')
-            this.aboutFeature('即点即听：粘贴链接或 BV 号，立即播放音频')
-            this.aboutFeature('随心播控：倍速、随机循环、睡眠定时、断点续播')
+            this.aboutFeature('订阅追更：UP 主 / 收藏夹 / 合集 / 系列四类源，更新提醒')
+            this.aboutFeature('即点即听：输入链接或 BV 号，即刻加入播放队列')
+            this.aboutFeature('快捷导入：分享到应用，自动识别 B 站链接')
+            this.aboutFeature('随心播控：倍速、随机循环、睡眠定时、进度同步')
             this.aboutFeature('后台不断：锁屏、控制中心、实况窗都能控制播放')
-            this.aboutFeature('听得讲究：四档音质可选，深浅色主题随心换')
           }
           .width('100%')
           .margin({ top: Constants.TOKEN_SPACE_M })
@@ -952,7 +946,7 @@ export struct SettingsPage {
             .margin({ top: Constants.TOKEN_SPACE_L })
 
           Text() {
-            Span('代码完全由 AI 生成（Vibecoding 作品），参考开源项目 ')
+            Span(' Vibecoding 作品，参考开源项目 ')
               .fontColor(this.textSecondary())
             Span('BiliMusic')
               .fontColor(this.accentColor.value)
@@ -992,7 +986,7 @@ export struct SettingsPage {
 
         }
         .width('100%')
-        .padding({ left: Constants.TOKEN_SPACE_XL, right: Constants.TOKEN_SPACE_XL, top: Constants.TOKEN_SPACE_L, bottom: Constants.TOKEN_SPACE_XL })
+        .padding({ left: Constants.TOKEN_SPACE_XL, right: Constants.TOKEN_SPACE_XL, top: Constants.TOKEN_SPACE_L, bottom: this.navBarHeight.value + Constants.TOKEN_SPACE_XL })
         .alignItems(HorizontalAlign.Center)
       }
       .width('100%')
@@ -1006,6 +1000,65 @@ export struct SettingsPage {
     .backgroundColor($r('app.color.sheet_panel_background'))
     .backdropBlur(Constants.GLASS_BLUR)
     .border({ width: { top: 1 }, color: $r('app.color.sheet_top_separator') })
+  }
+
+  @Builder
+  qualitySheet() {
+    OptionSheet({
+      title: this.qualityEditTarget === 'wifi' ? 'Wi-Fi 默认音质' : '移动网络默认音质',
+      notice: !this.isLogged ? '未登录时最高 64K，登录后可用更高音质'
+        : BiliSession.getInstance().vipStatus !== 1 ? '192K/Hi-Res/杜比需大会员' : '',
+      optionLabels: this.qualityOptions().map((tier: QualityTier): string => AudioQuality.label(tier)),
+      selectedLabel: AudioQuality.label(this.currentEditTier()),
+      onSelect: (index: number): void => {
+        this.applyQualityTier(this.qualityOptions()[index]);
+      }
+    })
+  }
+
+  @Builder
+  singleInsertSheet() {
+    OptionSheet({
+      title: '单集插入位置',
+      optionLabels: this.singleInsertOptions(),
+      selectedLabel: this.singleInsertLabel(),
+      onSelect: (index: number): void => {
+        this.applySingleInsert(index === 1);
+      }
+    })
+  }
+
+  // 登出胶囊（v0.8-part2 US1）：用户行行尾两字胶囊，中性淡底 + danger_red 文字，点击走既有确认弹窗
+  @Builder
+  logoutPill() {
+    Button('登出')
+      .height(Constants.LOGOUT_PILL_H)
+      .padding({ left: Constants.TOKEN_SPACE_14, right: Constants.TOKEN_SPACE_14 })
+      .backgroundColor($r('app.color.page_background'))
+      .fontColor($r('app.color.danger_red'))
+      .borderRadius(Constants.LOGOUT_PILL_RADIUS)
+      .fontSize(Constants.TOKEN_FONT_BODY_S)
+      .onClick(() => {
+        this.confirmLogout();
+      })
+  }
+
+  @Builder
+  subManageSheet() {
+    OptionSheet({
+      title: '订阅管理',
+      notice: '',
+      optionLabels: ['导出订阅', '导入订阅'],
+      selectedLabel: '',
+      onSelect: (index: number): void => {
+        this.showSubManageSheet = false;
+        if (index === 0) {
+          this.shareSubscriptions();
+        } else {
+          this.pickImportFile();
+        }
+      }
+    })
   }
 
   // 关于页项目地址行（US7）：label + URL 一行，点击走统一外链确认
@@ -1027,90 +1080,6 @@ export struct SettingsPage {
     .onClick(() => {
       this.confirmOpenLink(url);
     })
-  }
-
-  // 音质档位选择面板（audio-quality-settings）：单 sheet + qualityEditTarget 标记当前编辑项；
-  // 当前档 ✓ 高亮，选中即持久化并关闭；未登录仅渲染「最高」「64K」（FR-009）
-  @Builder
-  qualitySheetPanel() {
-    Column() {
-      Text(this.qualityEditTarget === 'wifi' ? 'Wi-Fi 默认音质' : '移动网络默认音质')
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.text_primary'))
-        .width('100%')
-        .padding({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_L, top: Constants.TOKEN_SPACE_L, bottom: Constants.TOKEN_SPACE_S })
-
-      ForEach(this.qualityOptions(), (tier: QualityTier) => {
-        Row() {
-          Text(AudioQuality.label(tier))
-            .fontSize(Constants.TOKEN_FONT_BODY_L)
-            .fontColor(this.currentEditTier() === tier
-              ? this.accentColor.value : this.textPrimary())
-            .layoutWeight(1)
-          if (this.currentEditTier() === tier) {
-            Text('✓')
-              .fontSize(Constants.TOKEN_FONT_BODY_L)
-              .fontColor(this.accentColor.value)
-          }
-        }
-        .width('100%')
-        .padding({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_L, top: 13, bottom: 13 })
-        .onClick(() => {
-          this.applyQualityTier(tier);
-        })
-      }, (tier: QualityTier) => `${tier}`)
-
-      if (!this.isLogged) {
-        Text('未登录时最高 64K，登录后可用更高音质')
-          .fontSize(Constants.TOKEN_FONT_BODY_S)
-          .fontColor(this.accentColor.value)
-          .width('100%')
-          .padding({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_L, top: Constants.TOKEN_SPACE_S, bottom: Constants.TOKEN_SPACE_L })
-      } else if (BiliSession.getInstance().vipStatus !== 1) {
-        Text('192K/Hi-Res/杜比需大会员')
-          .fontSize(Constants.TOKEN_FONT_BODY_S)
-          .fontColor(this.accentColor.value)
-          .width('100%')
-          .padding({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_L, top: Constants.TOKEN_SPACE_S, bottom: Constants.TOKEN_SPACE_L })
-      }
-    }
-    .width('100%')
-    .backgroundColor($r('app.color.sheet_background'))
-  }
-
-  // 单集插入位置选择面板（US3，复刻音质面板档式）：两选项单选，当前项 ✓ 高亮，选中即持久化并关闭
-  @Builder
-  singleInsertSheetPanel() {
-    Column() {
-      Text('单集插入位置')
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.text_primary'))
-        .width('100%')
-        .padding({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_L, top: Constants.TOKEN_SPACE_L, bottom: Constants.TOKEN_SPACE_S })
-
-      ForEach(this.singleInsertOptions(), (label: string, idx: number) => {
-        Row() {
-          Text(label)
-            .fontSize(Constants.TOKEN_FONT_BODY_L)
-            .fontColor(this.singleInsertLabel() === label ? this.accentColor.value : this.textPrimary())
-            .layoutWeight(1)
-          if (this.singleInsertLabel() === label) {
-            Text('✓')
-              .fontSize(Constants.TOKEN_FONT_BODY_L)
-              .fontColor(this.accentColor.value)
-          }
-        }
-        .width('100%')
-        .padding({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_L, top: 13, bottom: 13 })
-        .onClick(() => {
-          this.applySingleInsert(idx === 1);
-        })
-      }, (label: string) => label)
-    }
-    .width('100%')
-    .backgroundColor($r('app.color.sheet_background'))
   }
 
   build() {
@@ -1141,11 +1110,11 @@ export struct SettingsPage {
         .width('100%')
         .alignItems(VerticalAlign.Center)
         .padding({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_L, top: Constants.TOKEN_SPACE_6, bottom: Constants.TOKEN_SPACE_10 })
-        .bindSheet(this.showSingleInsertSheet, this.singleInsertSheetPanel(), {
-          height: '25%',
+        .bindSheet(this.showSingleInsertSheet, this.singleInsertSheet(), {
+          height: SheetSize.FIT_CONTENT,
           dragBar: true,
           showClose: false,
-          backgroundColor: $r('app.color.page_background'),
+          backgroundColor: $r('app.color.sheet_background'),
           preferType: SheetType.BOTTOM,
           onDisappear: (): void => {
             this.showSingleInsertSheet = false;
@@ -1157,19 +1126,21 @@ export struct SettingsPage {
             Column() {
               SettingsGroup({ title: '账号' }) {
                 if (this.accountLoading) {
-                  SettingsRow({
+                  ListRow({
                     title: '正在恢复登录状态…',
                     rowIcon: $r('sys.symbol.person')
                   })
                 } else if (this.isLogged) {
-                  SettingsRow({
+                  ListRow({
                     title: this.loginName,
                     rowIcon: $r('sys.symbol.person'),
                     avatarUrl: this.avatarUrl,
                     vipBadge: BiliSession.getInstance().vipStatus === 1,
                     showDivider: true
-                  })
-                  SettingsRow({
+                  }) {
+                    this.logoutPill()
+                  }
+                  ListRow({
                     title: '历史同步',
                     subtitle: '播放进度与 B 站云端双向同步，支持跨设备续播',
                     showToggle: true,
@@ -1180,22 +1151,14 @@ export struct SettingsPage {
                       AppStore.putNumber(Constants.KEY_HISTORY_SYNC, isOn ? 1 : 0);
                     }
                   })
-                  SettingsRow({
+                  ListRow({
                     title: '取消收藏提醒',
                     subtitle: '删除来自个人收藏夹的歌单视频时，询问是否取消B站上的收藏',
                     showToggle: true,
                     toggleOn: this.unfavoriteAskOn,
-                    showDivider: true,
                     toggleChange: (isOn: boolean): void => {
                       this.unfavoriteAskOn = isOn;
                       AppStore.putNumber(Constants.KEY_UNFAVORITE_ASK, isOn ? 1 : 0);
-                    }
-                  })
-                  SettingsRow({
-                    title: '退出登录',
-                    danger: true,
-                    rowAction: (): void => {
-                      this.confirmLogout();
                     }
                   })
                 } else {
@@ -1217,8 +1180,19 @@ export struct SettingsPage {
                   .textAlign(TextAlign.Center)
               }
 
+              SettingsGroup({ title: '' }) {
+                ListRow({
+                  title: '播放历史',
+                  rowIcon: $r('sys.symbol.clock'),
+                  showArrow: true,
+                  rowAction: (): void => {
+                    connectBool(Constants.AS_SHOW_PLAY_HISTORY, false).value = true;
+                  }
+                })
+              }
+
               SettingsGroup({ title: '播放设置' }) {
-                SettingsRow({
+                ListRow({
                   title: '启动时自动播放',
                   subtitle: '打开应用后自动继续上次进度',
                   showToggle: true,
@@ -1229,7 +1203,7 @@ export struct SettingsPage {
                     AppStore.putNumber(Constants.KEY_AUTO_PLAY_ON_START, isOn ? 1 : 0);
                   }
                 })
-                SettingsRow({
+                ListRow({
                   title: '后台打断续播',
                   subtitle: '来电等打断结束后自动继续播放',
                   showToggle: true,
@@ -1240,7 +1214,7 @@ export struct SettingsPage {
                     AppStore.putNumber(Constants.KEY_INTERRUPT_RESUME, isOn ? 1 : 0);
                   }
                 })
-                SettingsRow({
+                ListRow({
                   title: 'Wi-Fi 默认音质',
                   valueText: AudioQuality.label(AudioQuality.clampTier(this.wifiQuality, this.isLogged, BiliSession.getInstance().vipStatus)),
                   showArrow: true,
@@ -1249,7 +1223,7 @@ export struct SettingsPage {
                     this.openQualitySheet('wifi');
                   }
                 })
-                SettingsRow({
+                ListRow({
                   title: '移动网络默认音质',
                   valueText: AudioQuality.label(AudioQuality.clampTier(this.cellularQuality, this.isLogged, BiliSession.getInstance().vipStatus)),
                   showArrow: true,
@@ -1273,7 +1247,7 @@ export struct SettingsPage {
                     .textAlign(TextAlign.Start)
                     .padding({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_L, top: Constants.TOKEN_SPACE_XS, bottom: Constants.TOKEN_SPACE_10 })
                 }
-                SettingsRow({
+                ListRow({
                   title: '仅在 Wi-Fi 环境播放',
                   subtitle: '非 Wi-Fi 网络播放需手动确认',
                   showToggle: true,
@@ -1284,7 +1258,7 @@ export struct SettingsPage {
                     AppStore.putNumber(Constants.KEY_WIFI_ONLY_DOWNLOAD, isOn ? 1 : 0);
                   }
                 })
-                SettingsRow({
+                ListRow({
                   title: '单集插入位置',
                   valueText: this.singleInsertLabel(),
                   showArrow: true,
@@ -1307,7 +1281,7 @@ export struct SettingsPage {
                   .color($r('app.color.track_color'))
                   .margin({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_L })
 
-                Row({ space: Constants.TOKEN_SPACE_M }) {
+                Row() {
                   ForEach(Constants.ACCENT_PRESETS, (color: string) => {
                     this.accentSwatch(color)
                   }, (color: string) => color)
@@ -1316,61 +1290,53 @@ export struct SettingsPage {
                 .padding({ left: Constants.TOKEN_SPACE_14, right: Constants.TOKEN_SPACE_14, top: Constants.TOKEN_SPACE_M, bottom: Constants.TOKEN_SPACE_14 })
               }
 
-              SettingsGroup({ title: '订阅管理' }) {
-                SettingsRow({
-                  title: '导出订阅',
-                  subtitle: '生成订阅备份文件，经分享面板发送',
-                  rowIcon: $r('sys.symbol.share'),
-                  showArrow: true,
-                  showDivider: true,
-                  rowAction: (): void => {
-                    this.shareSubscriptions();
-                  }
-                })
-                SettingsRow({
-                  title: '导入订阅',
-                  subtitle: '从备份文件合并订阅，已订阅的源自动跳过',
-                  rowIcon: $r('sys.symbol.square_and_arrow_down'),
-                  showArrow: true,
-                  rowAction: (): void => {
-                    this.pickImportFile();
-                  }
-                })
+              Column() {
+                SettingsGroup({ title: '系统' }) {
+                  ListRow({
+                    title: '订阅管理',
+                    subtitle: '导出或导入订阅备份',
+                    rowIcon: $r('sys.symbol.square_and_arrow_down'),
+                    showArrow: true,
+                    showDivider: true,
+                    rowAction: (): void => {
+                      this.showSubManageSheet = true;
+                    }
+                  })
+                  ListRow({
+                    title: '日志查询',
+                    rowIcon: $r('sys.symbol.doc_text'),
+                    showArrow: true,
+                    showDivider: true,
+                    rowAction: (): void => {
+                      this.openLogPage();
+                    }
+                  })
+                  ListRow({
+                    title: '关于',
+                    rowIcon: $r('sys.symbol.info_circle'),
+                    showArrow: true,
+                    rowAction: (): void => {
+                      this.showAbout = true;
+                    }
+                  })
+                }
               }
-
-              SettingsGroup({ title: '通用' }) {
-                SettingsRow({
-                  title: '播放历史',
-                  rowIcon: $r('sys.symbol.clock'),
-                  showArrow: true,
-                  showDivider: true,
-                  rowAction: (): void => {
-                    connectBool(Constants.AS_SHOW_PLAY_HISTORY, false).value = true;
-                  }
-                })
-                SettingsRow({
-                  title: '日志查询',
-                  rowIcon: $r('sys.symbol.doc_text'),
-                  showArrow: true,
-                  showDivider: true,
-                  rowAction: (): void => {
-                    this.openLogPage();
-                  }
-                })
-                SettingsRow({
-                  title: '关于',
-                  rowIcon: $r('sys.symbol.info_circle'),
-                  showArrow: true,
-                  rowAction: (): void => {
-                    this.showAbout = true;
-                  }
-                })
-              }
+              .width('100%')
+              .bindSheet(this.showSubManageSheet, this.subManageSheet(), {
+                height: SheetSize.FIT_CONTENT,
+                dragBar: true,
+                showClose: false,
+                backgroundColor: $r('app.color.sheet_background'),
+                preferType: SheetType.BOTTOM,
+                onDisappear: (): void => {
+                  this.showSubManageSheet = false;
+                }
+              })
             }
             .width('100%')
             .alignItems(HorizontalAlign.Start)
             .padding({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_L, top: Constants.TOKEN_SPACE_XXS,
-              bottom: Constants.MINI_PLAYER_CLEARANCE + this.navBarHeight.value })
+              bottom: this.navBarHeight.value + Constants.TOKEN_SPACE_L })
             // ponytail: about 的 bindSheet 挂外层根 Column 或内层链首位时在 API 24 平板打开即自动关闭；单挂内容容器（HEAD 版 logSheet 同款宿主）稳定
             .bindSheet(this.showAbout, this.aboutSheet(), {
               height: '75%',
@@ -1390,11 +1356,11 @@ export struct SettingsPage {
         }
         .width('100%')
         .layoutWeight(1)
-        .bindSheet(this.showQualitySheet, this.qualitySheetPanel(), {
-          height: '40%',
+        .bindSheet(this.showQualitySheet, this.qualitySheet(), {
+          height: SheetSize.FIT_CONTENT,
           dragBar: true,
           showClose: false,
-          backgroundColor: $r('app.color.page_background'),
+          backgroundColor: $r('app.color.sheet_background'),
           preferType: SheetType.BOTTOM,
           onDisappear: (): void => {
             this.showQualitySheet = false;

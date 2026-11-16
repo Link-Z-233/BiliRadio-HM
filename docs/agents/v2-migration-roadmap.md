@@ -29,7 +29,7 @@
 | 2.1 | `component/CoverThumb.ets` | **免迁** | @Prop-only 无状态观测 |
 | 2.2 | `component/SettingsGroup.ets` | **免迁** | @Prop + @BuilderParam 无状态观测 |
 | 2.3 | `component/EdgeHint.ets` | **免迁** | @Prop-only |
-| 2.4 | `component/SettingsRow.ets` | **并入批次 3 SettingsPage 单元** | 含 `@StorageProp('accentColor')`（真 V1 存储观测），须与全局键策略联动 |
+| 2.4 | `component/SettingsRow.ets`（后更名 ListRow.ets） | **并入批次 3 SettingsPage 单元** | 含 `@StorageProp('accentColor')`（真 V1 存储观测），须与全局键策略联动 |
 | 2.5 | `component/MiniPlayer.ets` | **移至批次 4**（挂键组件） | `@StorageProp`×2（accentColor/navBarHeight），V1/V2 存储不互通 |
 | 2.6 | `component/QueueSheet.ets` | **移至批次 4**（挂键组件） | `@StorageLink`×2 + `@StorageProp`×2 + `@State`×11（最重组件） |
 | 2.7 | `component/QueueDrawer.ets` | **移至批次 4**（挂键组件） | `@StorageLink('showQueueSheet')`（双向绑定） |

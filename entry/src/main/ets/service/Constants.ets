@@ -206,6 +206,10 @@ export class Constants {
   // —— 账号行头像（v0.4-Part1-ux-fixes US9）：圆形裁切边长唯一来源 ——
   static readonly ACCOUNT_AVATAR_SIZE: number = 32;
 
+  // —— 登出胶囊（v0.8-part2-settings-regroup）：账号用户行行尾「登出」胶囊尺寸唯一来源 ——
+  static readonly LOGOUT_PILL_H: number = 32;
+  static readonly LOGOUT_PILL_RADIUS: number = 16;
+
   // —— 加载更多失败冷却（US2）：失败后冷却期内禁用重试，防止弱网下反复请求 ——
   static readonly LOAD_OLDER_FAIL_COOLDOWN_MS: number = 3000;
 
@@ -347,7 +351,7 @@ export class Constants {
 
   // —— 关于页链接（v0.4-Part1-ux-fixes US7）：项目双托管地址 + 参考项目仓库，统一二次确认跳转 ——
   static readonly LINK_PROJECT_GITCODE: string = 'https://gitcode.com/Link-Z-233/BiliRadio';
-  static readonly LINK_PROJECT_GITHUB: string = 'https://github.com/Link-Z-233/BiliRadio';
+  static readonly LINK_PROJECT_GITHUB: string = 'https://github.com/Link-Z-233/BiliRadio-HM';
   static readonly LINK_BILIMUSIC_REPO: string = 'https://github.com/taotie256/BiliMusic';
   static readonly LINK_PILIPLUS_REPO: string = 'https://github.com/bggRGjQaUbCoE/PiliPlus';
 
@@ -386,6 +390,7 @@ export class Constants {
   static readonly TOKEN_SPACE_XL: number = 24;
   static readonly TOKEN_SPACE_6: number = 6;
   static readonly TOKEN_SPACE_10: number = 10;
+  static readonly TOKEN_SPACE_13: number = 13;
   static readonly TOKEN_SPACE_14: number = 14;
   static readonly TOKEN_SPACE_20: number = 20;
   // 刷新提示行最小高：refreshingContent 自定义区高度随下拉距离自适应，无最小高约束会塌缩

@@ -10,14 +10,14 @@
 
 ## 源码结构
 
-源码全在 `entry/src/main/ets/`，共 49 个 .ets：
+源码全在 `entry/src/main/ets/`，共 50 个 .ets：
 
 ```
 entry/src/main/ets/
 ├── entryability/            应用入口
 ├── entrybackupability/      备份恢复扩展
 ├── pages/                   页面（7）
-├── component/               共用 UI（8）
+├── component/               共用 UI（9）
 ├── service/                 业务服务与基础设施（26）
 └── model/                   数据模型（6）
 ```
@@ -36,7 +36,7 @@ entry/src/main/ets/
 | `HomePage.ets` | 首页订阅源列表（新集徽标 / 长按进排序编辑态拖拽调序 / 左滑删除 / 空态）；列表底缘永久让位 MiniPlayer（v0.7-part2-refresh-share 起，原「内容从胶囊下穿过」设计废止）；把手拖拽边缘自动滚动（EdgeAutoScroller 复用）；静默刷新 CD 门/新集增量 toast；分享导入消费门控（extractBiliUrl 开面板 / 拒收 toast） |
 | `SourcePage.ets` | 订阅源详情（剧集列表 / 多选 / 刷新 / fav 入队 stamp 与归属回填） |
 | `PlayerOverlay.ets` | 播放浮层（封面取色 / 音质档位 / 倍速） |
-| `SettingsPage.ets` | 设置页（账号 / 播放 / 外观 / 订阅管理导出导入 / 历史与日志入口 / 关于） |
+| `SettingsPage.ets` | 设置页（分组最终态：账号组含历史同步/取消收藏提醒与用户行「登出」胶囊；播放历史独立无标题卡片；播放设置；外观（色板行均匀分布）；系统组含订阅管理合并行 + 日志入口与关于；滚动底部净空对齐 LogPage 覆盖层模式） |
 | `LogPage.ets` | 日志页（L2 层；导出 / 清空 / 分类过滤） |
 | `AddSubscriptionSheet.ets` | 添加订阅面板（链接识别 / UID / UP / 合集 / 收藏夹 / 分享导入 initialInput 灌入自动检索） |
 
@@ -50,7 +50,8 @@ entry/src/main/ets/
 | `HistorySheet.ets` | 播放历史面板内容（多选 / 已看完标记） |
 | `CoverThumb.ets` | 封面缩略图（无封面显示耳机占位） |
 | `SettingsGroup.ets` | 设置分组容器 |
-| `SettingsRow.ets` | 设置行（图标 / 标题 / 开关 / 箭头） |
+| `ListRow.ets` | 通用列表行（图标 / 标题 / 开关 / 箭头 / 行尾 trailing 槽位；设置页在用，播放页等可复用） |
+| `OptionSheet.ets` | 选项弹窗面板（固定标题/通知 + 可滚动列表 + 背景铺满；音质 / 单集插入 / 订阅管理弹窗共用） |
 | `SelectCheckbox.ets` | 多选行首勾选框（宽度 / 透明度随激活态） |
 
 ### service/（按职责域分组）
@@ -133,7 +134,7 @@ entry/src/main/ets/
 | `MiniPlayer`/`QueueSheet` 直接持有 `PlayerController`/`AppStore` 单例 | 单例范式的组成部分（组件直调服务），非反向依赖、不属违规 | 不拆 |
 | `PlayerController`（播控+队列+订阅+收藏） | 上帝对象候选 | 登记不拆分；拆分方案列远期 |
 | `BiliService`（全部 B 站 API，约 1800 行） | 职责单一（B 站 API 网关），体量大但内聚 | 登记不拆分；文件拆分列远期 |
-| `SettingsPage`（1400+ 行） | 页面体量大（分组+多面板） | 登记不拆分；远期可按面板抽组件 |
+| `SettingsPage`（1300+ 行） | 页面体量大（分组+多面板） | 登记不拆分；远期可按面板抽组件 |
 
 ### 契约执行约定
 
@@ -158,7 +159,7 @@ entry/src/main/ets/
 
 ## 状态管理现状
 
-- **V2 迁移整体完结**：模型层 6 类 `@ObservedV2`+`@Trace`；7 页面 + 挂键组件（SettingsRow/MiniPlayer/QueueSheet 等）全部 `@ComponentV2`（`@Local`/`@Param`/`@Monitor`）；CoverThumb/SettingsGroup 免迁（`@Prop`-only）
+- **V2 迁移整体完结**：模型层 6 类 `@ObservedV2`+`@Trace`；7 页面 + 挂键组件（ListRow/MiniPlayer/QueueSheet 等）全部 `@ComponentV2`（`@Local`/`@Param`/`@Monitor`）；CoverThumb/SettingsGroup 免迁（`@Prop`-only）
 - **`PlayerController` 零装饰器纯类**：手动 `subscribe`/`emitUi` 广播 + 版本计数，消费方（MiniPlayer/QueueSheet/PlayerOverlay/SettingsPage）`syncFrom` 拷贝进 `@Local`，代际无关
 - **双轨存储**：`AS_*` 瞬态键经 `V2State.ets` 包装类（BoolState/NumState/StrState）走 `AppStorageV2.connect`，读写一律 `.value`，同 key 共享实例天然双向；`KEY_*` 持久化走 `AppStore`（preferences）。键清单集中在 `Constants.ets`
 - **单例统一范式**：`X.getInstance()`（见 `Constants.ets` 文件头注释）
@@ -189,5 +190,5 @@ entry/src/main/ets/
 | 已知问题/登记/恢复线索 | docs/PROJECT_NOTES.md |
 | 令牌豁免登记 | docs/token-exemptions.md |
 | 签名与提交安全 | docs/SECURITY.md |
-| 验证流程与经验追加 | docs/agents/verifying.md |
+| 验证流程与经验（构建/功能验证分编） | docs/agents/verifying.md |
 | 历轮 spec/plan/tasks 工件 | spec/（feature.json 指向活跃目录） |

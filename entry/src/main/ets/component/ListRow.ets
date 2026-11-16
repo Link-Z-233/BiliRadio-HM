@@ -1,8 +1,12 @@
 import { Constants } from '../service/Constants';
 import { connectStr, StrState } from '../service/V2State';
 
+@Builder
+function rowEmptyTrailing() {
+}
+
 @ComponentV2
-export struct SettingsRow {
+export struct ListRow {
   @Param title: string = '';
   @Param subtitle: string = '';
   @Param valueText: string = '';
@@ -20,6 +24,8 @@ export struct SettingsRow {
     connectStr(Constants.AS_ACCENT_COLOR, Constants.ACCENT_DEFAULT);
   @Param rowAction: () => void = (): void => {};
   @Param toggleChange: (on: boolean) => void = (_on: boolean): void => {};
+  // 行尾自定义槽位（v0.8-part2-settings-regroup）：渲染于 valueText 之后、toggle/arrow 之前；未传零渲染
+  @BuilderParam trailing: () => void = rowEmptyTrailing;
   @Local isPressed: boolean = false;
   @Local avatarBroken: boolean = false;
 
@@ -87,6 +93,7 @@ export struct SettingsRow {
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .margin({ right: Constants.TOKEN_SPACE_6 })
         }
+        this.trailing()
         if (this.showToggle) {
           Toggle({ type: ToggleType.Switch, isOn: this.toggleOn })
             .selectedColor(this.accentColor.value)
