@@ -74,6 +74,7 @@ BiliRadio — HarmonyOS NEXT 单模块 B 站电台应用。本文件是 AI 代�
 - **验证范围默认值**：**默认停到真机前**——构建验证通过即收尾，不执行真机部署/运行/UI 验证（`tasks.md` Verification 阶段默认只含构建+修复与收尾停点，`<!-- verification_scope: build-only -->`）；**Phase 3 起不再询问验证范围**，需要 UI 验证（模拟器/真机）须用户显式提出并改标记为 `<!-- verification_scope: build+ui -->`
 - **bugfix 记录**：直接修复的 bug（不走 SDD 的）统一记入活跃 spec 目录（`spec/feature.json` 所指）的单份 `bugfix.md`，按发生顺序编号分节追加（`## 1.` 起递增）；跟 SDD 流程走的修复不进 `bugfix.md`（任务/验证工件已承载）
 - **当前轮功能再优化**：对本轮 spec 已增添或修改的功能做进一步优化时，**修正活跃目录三工件的原有条目**（就地更新对应 US/FR/D/Task，Input 概述同步，不再以追加条目承载），不另开轮次、不进 `bugfix.md`；全新功能（无原条目可修正）进行新增条目
+- **工件只记最终态**：轮内试验后取消的中间态方案（原需求不存在的内容）不写入工件——不写「弃」「回退」等试验叙事，条目始终描述最终形态；过程历史由 git 承载
 - **输出内容默认不带时间戳**：注释只写机制/动机/约束，不写日期；spec 工件（spec.md/plan.md/tasks.md）同样**不带任何日期戳**（Created/Status/Changelog/追加标注一律省略日期）——时间信息由 git 历史承载，bugfix.md 仅按编号分节承载顺序
 - **Spec**：`spec/` 存放功能规格与 UX 反馈轮次，`spec/feature.json` 指向当前活跃目录；实现功能前先查阅对应 spec
 
