@@ -11,7 +11,7 @@ import { AudioTrack, AudioQuality, QualityTier, ResolvedAudio } from '../model/A
 
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { Constants } from './Constants';
+import { Constants, sleep } from './Constants';
 import { Logger } from './Logger';
 import { NetUtil } from './NetUtil';
 
@@ -91,6 +91,8 @@ export class PlayerController {
   private playingNow: boolean = false;
 
   private player: AudioPlayer = new AudioPlayer();
+  // 在途换档旁路实例唯一归口（v0.8-part3）：非 undefined 即换档在途；所有丢弃点统一经 discardStandby 释放
+  private standbyPlayer: AudioPlayer | undefined = undefined;
   private mediaSession: MediaSession = MediaSession.getInstance();
   private inited: boolean = false;
   // init 真正跑完的标志（inited 是防重入哨兵、进入即置 true，不能表达完成），
@@ -519,46 +521,7 @@ export class PlayerController {
         }
       }
 
-      this.player.onStateChange = (state: string): void => {
-        this.onPlayerState(state);
-      };
-      this.player.onTimeUpdate = (time: number): void => {
-        if (this.isPreparing) {
-          return;
-        }
-        this.onPlayerTime(time);
-      };
-      this.player.onError = (code: number, msg: string): void => {
-        this.isPreparing = false;
-        this.isPrepared = false;
-        this.playIntent = false;
-        this.setPlaying(false);
-        this.statusMsg = `播放错误: ${msg}`;
-        this.playbackError('play', code, this.currentBvid());
-        this.mediaSession.updateState(false, this.currentTime);
-        this.mediaSession.stopBackground();
-        this.emitUi();
-      };
-      this.player.onAudioInterrupt = (eventType: 'INTERRUPT' | 'END_INTERRUPT'): void => {
-        if (eventType === 'INTERRUPT') {
-          // isPlaying 在打断瞬间可能已被系统先置 false，改判「用户是否主动暂停过」更可靠
-          this.resumeAfterInterrupt = this.playingNow || !this.pausedByUser;
-          // 意图校准：打断即不可播，图标立即回播放键；END_INTERRUPT 续播经 playRequest 置回
-          this.playIntent = false;
-          this.emitUi();
-          hilog.info(Constants.LOG_DOMAIN, Constants.LOG_TAG,
-            'audioInterrupt INTERRUPT resumeAfterInterrupt=%{public}d', this.resumeAfterInterrupt ? 1 : 0);
-        } else {
-          const resumeEnabled: boolean = AppStore.getNumber(Constants.KEY_INTERRUPT_RESUME, 0) === 1;
-          hilog.info(Constants.LOG_DOMAIN, Constants.LOG_TAG,
-            'audioInterrupt END_INTERRUPT enabled=%{public}d resumeFlag=%{public}d',
-            resumeEnabled ? 1 : 0, this.resumeAfterInterrupt ? 1 : 0);
-          if (resumeEnabled && this.resumeAfterInterrupt) {
-            this.playRequest();
-          }
-          this.resumeAfterInterrupt = false;
-        }
-      };
+      this.attachPlayerCallbacks(this.player);
 
       this.mediaSession.init(
         (): void => { this.playRequest(); },
@@ -581,7 +544,7 @@ export class PlayerController {
       }
 
       // 网络稳定切换监听（audio-quality-settings FR-010）：进程生命周期内单例注册，
-      // 网络在 Wi-Fi/流量间稳定切换后按新网络默认档自动换流（失败由 setQualityTier 回滚不打断）；
+      // 网络在 Wi-Fi/流量间稳定切换后按新网络默认档自动换流（失败由 setQualityTier 释放旁路实例保旧流不打断）；
       // US6：回调同时维护 wifiNow 快照（isWifiNow 查询用），初值由一次性查询补齐
       NetUtil.isWifi().then((wifi: boolean): void => {
         this.wifiNow = wifi;
@@ -598,6 +561,58 @@ export class PlayerController {
     }
     this.initDone = true;
     this.emitUi();
+  }
+
+  // 主实例回调挂载（v0.8-part3 自 init 抽取）：init 与换档交接两处复用，挂载内容不变
+  private attachPlayerCallbacks(target: AudioPlayer): void {
+    target.onStateChange = (state: string): void => {
+      this.onPlayerState(state);
+    };
+    target.onTimeUpdate = (time: number): void => {
+      if (this.isPreparing) {
+        return;
+      }
+      this.onPlayerTime(time);
+    };
+    target.onError = (code: number, msg: string): void => {
+      this.isPreparing = false;
+      this.isPrepared = false;
+      this.playIntent = false;
+      this.setPlaying(false);
+      this.statusMsg = `播放错误: ${msg}`;
+      this.playbackError('play', code, this.currentBvid());
+      this.mediaSession.updateState(false, this.currentTime);
+      this.mediaSession.stopBackground();
+      this.emitUi();
+    };
+    target.onAudioInterrupt = (eventType: 'INTERRUPT' | 'END_INTERRUPT'): void => {
+      if (eventType === 'INTERRUPT') {
+        // isPlaying 在打断瞬间可能已被系统先置 false，改判「用户是否主动暂停过」更可靠
+        this.resumeAfterInterrupt = this.playingNow || !this.pausedByUser;
+        // 意图校准：打断即不可播，图标立即回播放键；END_INTERRUPT 续播经 playRequest 置回
+        this.playIntent = false;
+        this.emitUi();
+        hilog.info(Constants.LOG_DOMAIN, Constants.LOG_TAG,
+          'audioInterrupt INTERRUPT resumeAfterInterrupt=%{public}d', this.resumeAfterInterrupt ? 1 : 0);
+      } else {
+        const resumeEnabled: boolean = AppStore.getNumber(Constants.KEY_INTERRUPT_RESUME, 0) === 1;
+        hilog.info(Constants.LOG_DOMAIN, Constants.LOG_TAG,
+          'audioInterrupt END_INTERRUPT enabled=%{public}d resumeFlag=%{public}d',
+          resumeEnabled ? 1 : 0, this.resumeAfterInterrupt ? 1 : 0);
+        if (resumeEnabled && this.resumeAfterInterrupt) {
+          this.playRequest();
+        }
+        this.resumeAfterInterrupt = false;
+      }
+    };
+  }
+
+  // 换档交接前摘除旧实例回调：pause/release 的残余事件不再串入 onPlayerState/onPlayerTime
+  private detachPlayerCallbacks(target: AudioPlayer): void {
+    target.onStateChange = undefined;
+    target.onTimeUpdate = undefined;
+    target.onError = undefined;
+    target.onAudioInterrupt = undefined;
   }
 
   // 即时落定播放态：内部与对外字段同步直写（去抖基建已随意图先行重写删除）
@@ -886,15 +901,15 @@ export class PlayerController {
   }
 
   // 流式开播带重试（US2）：同一 URL 重试一次仍失败则轮换下一备选直链；全部失败抛最后错误，
-  // 由 playIndex 统一提示，播放队列与列表状态不受影响
-  private async openStreamWithRetry(urls: string[]): Promise<void> {
+  // 由调用方统一提示，播放队列与列表状态不受影响；目标实例由入参指定（主实例与换档旁路实例共用）
+  private async openStreamWithRetry(player: AudioPlayer, urls: string[]): Promise<void> {
     let lastError: Error = new Error('No stream URL');
     for (let i = 0; i < urls.length; i++) {
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
           hilog.info(Constants.LOG_DOMAIN, Constants.LOG_TAG,
             'try stream url %{public}d/%{public}d attempt %{public}d', i + 1, urls.length, attempt + 1);
-          await this.player.setStreamSource(urls[i]);
+          await player.setStreamSource(urls[i]);
           return;
         } catch (err) {
           const error = err as BusinessError;
@@ -1114,7 +1129,7 @@ export class PlayerController {
     // 完播防护日志去重复位：新条目起播后防护触发重新登记一次
     this.anomalyGuardLogged = false;
     // 续播决策（plan R4）：仅新起播（seekMs<=0，如点历史条目/点单集入队/切歌）时以历史进度决定起点；
-    // seekMs>0 的换音质保进度（setQualityTier resumePos）与全局断点恢复路径零变化
+      // seekMs>0 的保进度起播与全局断点恢复路径零变化
     let effectiveSeekMs: number = seekMs;
     if (seekMs <= 0) {
       effectiveSeekMs = this.getResumeMsFor(item.bvid, item.page);
@@ -1204,7 +1219,7 @@ export class PlayerController {
       Logger.log('player', 'playIndex quality',
         `tier=${Number(tier)} qn=${result.id} source=${result.source} tracks=${result.tracks.length}`);
       this.emitUi();
-      await this.openStreamWithRetry(result.urls);
+      await this.openStreamWithRetry(this.player, result.urls);
       if (token !== this.loadToken) {
         return;
       }
@@ -1573,9 +1588,33 @@ export class PlayerController {
     }, Constants.SEEK_BY_DEBOUNCE_MS);
   }
 
-  // 手动/自动换档（audio-quality-settings FR-004/FR-010）：换流保进度，复用 loadToken 并发模型
-  // （并发切档以最后触发者为准）；writeBack=true（面板手动）按当前网络写回对应默认档键，
-  // writeBack=false（网络自动换档）不写（目标档本就是新网络默认值）
+  // 旁路实例丢弃唯一归口（D5）：字段仍指向该实例才清空，随后释放；重复释放幂等
+  private discardStandby(standby: AudioPlayer): void {
+    if (this.standbyPlayer === standby) {
+      this.standbyPlayer = undefined;
+    }
+    standby.release().catch((): void => {});
+  }
+
+  // 旁路实例出声确认（D2/D6）：轮询 isPlaying，上限 TOKEN_SWITCH_PLAY_TIMEOUT_MS；token 失配提前放弃
+  private async waitStandbyPlaying(standby: AudioPlayer, token: number): Promise<boolean> {
+    const start: number = Date.now();
+    while (!standby.isPlaying) {
+      if (token !== this.loadToken ||
+        Date.now() - start > Constants.TOKEN_SWITCH_PLAY_TIMEOUT_MS) {
+        return false;
+      }
+      await sleep(30);
+    }
+    return true;
+  }
+
+  // 手动/自动换档（audio-quality-settings FR-004/FR-010；v0.8-part3 改双播放器旁路交接）：
+  // 旧实例全程出声不动，新档流经 standbyPlayer 旁路实例静默预载（回调未挂即天然静默），
+  // prepared 后 seek 到主实例实时进度起播，确认真实出声再停旧换新（零静音缝隙，允许毫秒级重叠）；
+  // 预载/起播/确认任一失败或超时整体释放旁路实例，旧流无感知继续（FR-003）；
+  // 暂停态切档走无声变体（预载后不起播，替换保持暂停）。并发沿用 loadToken「最后触发者为准」；
+  // writeBack=true（面板手动）按当前网络写回对应默认档键，false（网络自动）不写
   async setQualityTier(tier: QualityTier, writeBack: boolean): Promise<void> {
     if (this.currentTrackSource !== 'dash' || this.isPreparing || this.currentCid <= 0) {
       Logger.log('player', 'setQualityTier skip',
@@ -1588,38 +1627,73 @@ export class PlayerController {
       Logger.log('player', 'setQualityTier skip', 'no current item');
       return;
     }
-    const resumePos: number = this.currentTime;
     const wasPlaying: boolean = this.playingNow && !this.pausedByUser;
-    const prevQualityCode: number = this.currentQualityCode;
-    const prevStatusMsg: string = this.statusMsg;
-    // 切档前取消挂起的 seekBy 防抖，防止其到期 seek 到已释放的旧实例
-    if (this.seekByTimerId >= 0) {
-      clearTimeout(this.seekByTimerId);
-      this.seekByTimerId = -1;
-      Logger.log('player', 'seekBy cancel', 'setQualityTier');
+    // 在途换档：最后触发者为准，先释放旧旁路实例（旧流程 token 失配后自行收敛）
+    if (this.standbyPlayer !== undefined) {
+      this.discardStandby(this.standbyPlayer);
     }
-    this.isPreparing = true;
     this.statusMsg = '正在切换音质…';
     this.emitUi();
     this.loadToken++;
     const token: number = this.loadToken;
-    // prepared/playing 回调经既有 pendingSeekMs/playIntent 机制恢复进度与播放态
-    this.pendingSeekMs = resumePos;
-    this.currentTime = resumePos;
-    this.playIntent = wasPlaying;
+    const standby: AudioPlayer = new AudioPlayer();
+    this.standbyPlayer = standby;
     Logger.log('player', 'setQualityTier',
-      `bvid=${item.bvid} cid=${this.currentCid} tier=${Number(tier)} resumePos=${resumePos} wasPlaying=${wasPlaying ? 1 : 0}`);
-    // 标记换流是否已进入重建阶段（旧实例已释放后失败须走恢复链）
-    let streamBroken: boolean = false;
+      `bvid=${item.bvid} cid=${this.currentCid} tier=${Number(tier)} wasPlaying=${wasPlaying ? 1 : 0}`);
     try {
       const result: ResolvedAudio = await BiliService.resolveAudioTrack(item.bvid, this.currentCid, tier);
       if (token !== this.loadToken) {
+        this.discardStandby(standby);
         return;
       }
-      streamBroken = true;
-      await this.openStreamWithRetry(result.urls);
+      await this.openStreamWithRetry(standby, result.urls);
       if (token !== this.loadToken) {
+        this.discardStandby(standby);
         return;
+      }
+      await standby.waitPrepared(Constants.TOKEN_SWITCH_PREPARED_TIMEOUT_MS);
+      if (token !== this.loadToken) {
+        this.discardStandby(standby);
+        return;
+      }
+      standby.setRate(this.playbackRate);
+      if (wasPlaying) {
+        await standby.seek(this.currentTime);
+        if (token !== this.loadToken) {
+          this.discardStandby(standby);
+          return;
+        }
+        await standby.play();
+        const confirmed: boolean = await this.waitStandbyPlaying(standby, token);
+        if (token !== this.loadToken) {
+          this.discardStandby(standby);
+          return;
+        }
+        if (!confirmed) {
+          throw new Error('standby play confirm timeout');
+        }
+      } else {
+        await standby.seek(this.currentTime);
+      }
+      if (token !== this.loadToken) {
+        this.discardStandby(standby);
+        return;
+      }
+      // —— 交接：先起新（播放路径已出声）后停旧 ——
+      const outgoing: AudioPlayer = this.player;
+      this.detachPlayerCallbacks(outgoing);
+      // 换档在途期间用户已暂停：收敛为暂停态，旁路实例停声后替换
+      if (wasPlaying && !(this.playingNow && !this.pausedByUser)) {
+        await standby.pause();
+      }
+      await outgoing.pause();
+      this.player = standby;
+      this.standbyPlayer = undefined;
+      this.attachPlayerCallbacks(this.player);
+      outgoing.release().catch((): void => {});
+      // 换档在途期间用户已恢复播放：替换后立即起播续声
+      if (!wasPlaying && this.playingNow && !this.pausedByUser) {
+        this.player.play().catch((): void => {});
       }
       this.currentQualityCode = result.id;
       this.availableTracks = result.tracks;
@@ -1633,7 +1707,7 @@ export class PlayerController {
       Logger.log('player', 'setQualityTier done',
         `qn=${result.id} source=${result.source} writeBack=${writeBack ? 1 : 0}`);
       this.emitUi();
-      // 「已切换」提示延迟落定，避开 prepared/playing 事件对 statusMsg 的覆盖（此后由播放态自然清空）
+      // 「已切换」提示延迟落定，避开交接窗口事件对 statusMsg 的覆盖（此后由播放态自然清空）
       setTimeout((): void => {
         if (token !== this.loadToken) {
           return;
@@ -1644,64 +1718,25 @@ export class PlayerController {
       }, 600);
     } catch (err) {
       if (token !== this.loadToken) {
+        this.discardStandby(standby);
         return;
       }
       const error = err as BusinessError;
       Logger.log('player', 'setQualityTier failed', error.message);
-      if (!streamBroken) {
-        // 解析阶段失败：原流未动，直接回滚状态继续播放
-        this.isPreparing = false;
-        this.statusMsg = prevStatusMsg;
-        this.emitUi();
-        return;
-      }
-      // 换流阶段失败：原流已被重建释放，best-effort 以原档位重解析恢复（FR-010 失败保持原流不打断）
-      this.statusMsg = '正在恢复播放...';
+      // 失败纯放弃：释放旁路实例，旧流与播放状态字段全程未动（FR-003，无恢复链）
+      this.discardStandby(standby);
+      this.statusMsg = '音质切换失败';
       this.emitUi();
-      try {
-        const backTier: QualityTier = AudioQuality.tierOfTrackId(prevQualityCode);
-        const back: ResolvedAudio = await BiliService.resolveAudioTrack(item.bvid, this.currentCid, backTier);
-        if (token !== this.loadToken) {
-          return;
-        }
-        this.pendingSeekMs = resumePos;
-        this.playIntent = wasPlaying;
-        await this.openStreamWithRetry(back.urls);
-        if (token !== this.loadToken) {
-          return;
-        }
-        this.currentQualityCode = back.id;
-        this.availableTracks = back.tracks;
-        this.currentTrackSource = back.source;
-        this.currentRequestedTier = backTier;
-        this.statusMsg = back.source === 'dash'
-          ? `音质切换失败，已恢复 ${AudioQuality.trackLabel(back.id)}` : '音质切换失败，已恢复默认流';
-        Logger.log('player', 'quality restore ok', `qn=${back.id}`);
-        this.emitUi();
-      } catch (err2) {
-        if (token !== this.loadToken) {
-          return;
-        }
-        const error2 = err2 as BusinessError;
-        Logger.log('player', 'quality restore failed', error2.message);
-        // 恢复失败停口（镜像 stopFailedPlayback 语义）：旧流已释放、新流未起——isPrepared 陈旧 true
-        // 会令点播放走 player.play() 空操作卡死，须复位使点播放走 playIndex 从断点重取流
-        this.isPreparing = false;
-        this.isPrepared = false;
-        this.persistProgress();
-        this.stopFailedPlayback('切换音质失败');
-        this.playbackError('play', 0, this.currentBvid(), '切换音质失败');
-        this.emitUi();
-      }
     }
   }
 
-  // 网络稳定切换自动换档（FR-010）：仅在线 dash 流且非切剧中触发；
-  // 目标档与最近取流档相同则跳过（避免无谓换流中断），失败由 setQualityTier 回滚保持原流
+  // 网络稳定切换自动换档（FR-010）：仅在线 dash 流且非切剧中触发；换档在途（standbyPlayer 非空）跳过，
+  // 目标档与最近取流档相同则跳过（避免无谓换流中断），失败由 setQualityTier 释放旁路实例保旧流
   private async applyDefaultTierForNetwork(): Promise<void> {
-    if (this.currentTrackSource !== 'dash' || this.isPreparing || this.currentCid <= 0) {
+    if (this.currentTrackSource !== 'dash' || this.isPreparing ||
+      this.standbyPlayer !== undefined || this.currentCid <= 0) {
       Logger.log('player', 'auto tier switch skip',
-        `source=${this.currentTrackSource} preparing=${this.isPreparing ? 1 : 0}`);
+        `source=${this.currentTrackSource} preparing=${this.isPreparing ? 1 : 0} switching=${this.standbyPlayer !== undefined ? 1 : 0}`);
       return;
     }
     const tier: QualityTier = await this.readDefaultTierForNetwork();
@@ -1858,6 +1893,7 @@ export class PlayerController {
       this.currentItemEnded = false;
       this.currentTime = 0;
       this.duration = 0;
+      this.loadToken++;
       await this.player.resetPlayer();
       this.statusMsg = '已取消收藏，歌单已空';
         AppStore.savePlaylistFile(this.playlist, -1, 0, 0);
@@ -2286,6 +2322,7 @@ export class PlayerController {
       this.currentItemEnded = false;
       this.currentTime = 0;
       this.duration = 0;
+      this.loadToken++;
       await this.player.resetPlayer();
       this.statusMsg = `已从歌单移除 ${removedCount} 首，歌单已空`;
       AppStore.savePlaylistFile(this.playlist, -1, 0, 0);

@@ -60,7 +60,7 @@ entry/src/main/ets/
 
 | 文件 | 职责 |
 |------|------|
-| `PlayerController.ets` | 播控中枢（播放 / 队列 / 订阅收藏编排 / 队列移除联动取消收藏拦截与确认回调；取流失败分类分发 + 失效 invalidSet（红 X）/ 异常 anomalySet（橙感叹号）双标记集；零装饰器广播） |
+| `PlayerController.ets` | 播控中枢（播放 / 队列 / 订阅收藏编排 / 队列移除联动取消收藏拦截与确认回调；音质换档双播放器旁路交接——旧实例全程出声、新档经 standbyPlayer 旁路预载就绪后停旧换新，standbyPlayer 字段为在途换档唯一归口、全部丢弃点统一释放，失败释放旁路保旧流不打断；取流失败分类分发 + 失效 invalidSet（红 X）/ 异常 anomalySet（橙感叹号）双标记集；零装饰器广播） |
 | `AudioPlayer.ets` | media.AVPlayer 音频播放封装 |
 | `MediaSession.ets` | avSession 系统播控（锁屏 / 控制中心）+ 后台长驻任务 |
 | `SleepTimerController.ets` | 睡眠定时（定时暂停 / 播完暂停） |

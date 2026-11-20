@@ -175,4 +175,13 @@
 - v0.8-part2 真机自查反馈修复（build-only，未部署）：
   - bindSheet FIT_CONTENT 高度下内容根节点禁 `height('100%')`：fit-content 测量把 '100%' 解析为 sheet 满高（≈全屏），三选项弹窗真机整体全屏；修法 = 根节点与选项列表均内容自适应（去根 `height('100%')` 与 `Scroll.layoutWeight(1)`，内容超 sheet 上限时 Scroll 在约束内转内部滚动）；`height('100%')` 铺满形态仅适用固定百分比高度
 
+- v0.8-part3 无缝音质切换（build-only，未部署）：
+  - 全量构建日志（`Temp\deveco\devecocli\build-*.log`）内 WARN 行的文件路径是正斜杠（`File: D:/.../AudioPlayer.ets:128:42`），Select-String 用反斜杠模式（`service\\File`）检索不到——按文件定位告警一律用正斜杠模式（如 `service/(PlayerController|AudioPlayer)\.ets`）；arkts_check 与 build 全量 lint 告警口径不同（build 会多报「Function may throw」类），对账以 build 日志为准、arkts_check 作预检
+
+- v0.8-part3 无缝音质切换模拟器实测（build+ui，模拟器）：
+  - 播放行为时序核算以应用日志为权威源（`hdc shell tail /data/app/el2/100/base/com.biliradio.app/haps/entry/files/biliradio_log.txt`）：hilog 只含 state 转换/try stream url 等少数点位，setQualityTier 详情与 statusMsg 只进应用日志；工具调用延迟高达 20-30s/次，位置推进凭体感估算会误判「跳进度」，须按日志时间戳换算（复播起点到操作时刻 × 倍速）
+
+- v0.8-part3 无缝音质切换模拟器实测（build+ui，模拟器）：
+  - 模拟器锁屏三步恢复：`power-shell wakeup` + `power-shell setmode 602` → `devecocli ui swipe 640 2600 640 1000 --speed 2000` 上滑解锁 → `hdc shell aa start -a EntryAbility -b com.biliradio.app` 拉回应用（锁屏后应用转后台）；防再锁 `power-shell timeout -o 600000` **仅实体机生效，模拟器无效**（模拟器长测中途再锁屏按三步恢复处置即可）；`devecocli ui` 无 back 命令，swipe 参数是 `--speed` 非 `--duration`；模拟器网络为 eth0 NAT（`NetUtil.isWifi()`=false、wlan0 无 AP 可连），Wi-Fi↔蜂窝翻转类用例（自动换档触发）在模拟器不可测
+
 （追加区条目积累后由整理轮整合进第 2/3 节对应板块并清空本区）

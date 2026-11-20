@@ -107,6 +107,9 @@ export class Constants {
   static readonly SHORT_LINK_CONNECT_MS: number = 8000;
   static readonly SHORT_LINK_READ_MS: number = 8000;
   static readonly STREAM_TIMEOUT_MS: number = 120000;
+  // —— 无缝音质切换超时（v0.8-part3）：旁路实例 prepared 等待 / 起播出声确认上限，超时放弃换档保旧流 ——
+  static readonly TOKEN_SWITCH_PREPARED_TIMEOUT_MS: number = 8000;
+  static readonly TOKEN_SWITCH_PLAY_TIMEOUT_MS: number = 3000;
   static readonly SLEEP_TIMER_PRESETS: number[] = [15 * 60, 30 * 60, 60 * 60];
   static readonly SLEEP_TIMER_MAX_HOURS: number = 12;
   static readonly SLEEP_TIMER_MIN_SECONDS: number = 60;

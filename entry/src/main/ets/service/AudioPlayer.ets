@@ -161,6 +161,11 @@ export class AudioPlayer {
     await player.prepare();
   }
 
+  // 旁路实例等待 prepared 落定（v0.8-part3）：setStreamSource 发出 prepare 即返回，主实例路径零改动
+  async waitPrepared(timeoutMs: number): Promise<void> {
+    await this.waitForState('prepared', timeoutMs);
+  }
+
   async play(): Promise<void> {
     if (this.avPlayer !== undefined && this._isPrepared) {
       try {
