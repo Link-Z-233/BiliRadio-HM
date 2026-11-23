@@ -80,6 +80,9 @@ export class PlayerController {
   currentTime: number = 0;
   duration: number = 0;
   statusMsg: string = '在首页添加订阅，或到订阅源详情页播放节目';
+  // 最近一次 loadPlaylistAndPlay 的跳过计数：toast 分型用，调用方在 then 中随即读取
+  lastEnqueueSkipped: number = 0;
+  lastEnqueueInteractiveSkipped: number = 0;
   pendingSeekMs: number = 0;
   // 播放意图（v0.3-bugfix-round3 US1）：用户对播放/暂停的最后表态（点击即翻转），是播放控制图标的第一显示来源；
   // AVPlayer 事件只做校准复位（出错/打断/停止/播完停止），冷启动恒 false，不落盘
@@ -186,21 +189,39 @@ export class PlayerController {
     return `${label}x`;
   }
 
-  // 入队结果 → toast 文案（queue-redesign US6）：全库唯一映射点
-  static enqueueToast(result: EnqueueResult): string {
+  // 入队结果 + 跳过计数 → toast 文案（queue-redesign US6）：全库唯一映射点；
+  // 有跳过时 toast 只报跳过明细（入队结果由 statusMsg 承载），单一类型点名重复/互动；
+  // 全跳过分流：全重复→已在队列中、全互动→互动拦截、混合全跳→合并跳过数（修正原 DUPLICATE 一刀切把互动跳过误报成「已在队列中」）
+  static enqueueToast(result: EnqueueResult, skipped: number = 0, interactiveSkipped: number = 0): string {
     if (result === EnqueueResult.APPENDED) {
-      return Constants.TOAST_ENQUEUE_APPENDED;
+      return skipped + interactiveSkipped > 0
+        ? PlayerController.skipToastText(skipped, interactiveSkipped) : Constants.TOAST_ENQUEUE_APPENDED;
     }
     if (result === EnqueueResult.STARTED) {
-      return Constants.TOAST_ENQUEUE_STARTED;
+      // 空队起步只可能跳过互动（去重无从谈起），报跳过明细；零跳过保持「开始播放」
+      return interactiveSkipped > 0
+        ? PlayerController.skipToastText(skipped, interactiveSkipped) : Constants.TOAST_ENQUEUE_STARTED;
     }
     if (result === EnqueueResult.DUPLICATE) {
-      return Constants.TOAST_ENQUEUE_DUPLICATE;
+      // 混合全跳（重复+互动并存、无一入队）改报合并跳过数；纯重复全跳保持「已在队列中」
+      return skipped > 0 && interactiveSkipped > 0
+        ? PlayerController.skipToastText(skipped, interactiveSkipped) : Constants.TOAST_ENQUEUE_DUPLICATE;
     }
     if (result === EnqueueResult.INTERACTIVE) {
       return Constants.TOAST_INTERACTIVE_BLOCKED;
     }
     return Constants.TOAST_ENQUEUE_FAILED;
+  }
+
+  // 跳过计数 → toast 文案：单一类型点名，双类型合并总数（N 由实际计数代入）
+  private static skipToastText(skipped: number, interactiveSkipped: number): string {
+    if (skipped > 0 && interactiveSkipped > 0) {
+      return Constants.TOAST_SKIP_MIXED.replace('N', `${skipped + interactiveSkipped}`);
+    }
+    if (skipped > 0) {
+      return Constants.TOAST_SKIP_DUPLICATE.replace('N', `${skipped}`);
+    }
+    return Constants.TOAST_SKIP_INTERACTIVE.replace('N', `${interactiveSkipped}`);
   }
 
   // 订阅 UI 刷新（US2/KI-1）：返回退订句柄，调用方须在 aboutToDisappear 中调用，
@@ -434,7 +455,7 @@ export class PlayerController {
       this.playIntent = false;
       this.currentItemEnded = true;
       this.statusMsg = '播放结束';
-      AppStore.savePlaylistFile(this.playlist, this.currentIndex, 0, this.currentQualityCode);
+      AppStore.savePlaylistFile(this.playlist, this.currentIndex, 0, this.currentQualityCode, this.designatedNextQueue);
       return true;
     }
     this.showAnomalyToast(Constants.TOAST_ANOMALY_SKIP);
@@ -520,6 +541,15 @@ export class PlayerController {
           autoStartPos = restorePos;
         }
       }
+      // 指定名单恢复（v0.8-part4 US1 FR-002）：items 恢复后按「队列中存在该 key」过滤
+      // （顺序保留，失效 key 静默丢弃），跨重启继续兑现「下一首播放」
+      const restoredDesignated: string[] = [];
+      for (let i = 0; i < snapshot.designatedKeys.length; i++) {
+        if (this.indexOfKey(snapshot.designatedKeys[i]) >= 0) {
+          restoredDesignated.push(snapshot.designatedKeys[i]);
+        }
+      }
+      this.designatedNextQueue = restoredDesignated;
 
       this.attachPlayerCallbacks(this.player);
 
@@ -953,6 +983,8 @@ export class PlayerController {
       this.emitUi();
       return EnqueueResult.INTERACTIVE;
     }
+    this.lastEnqueueSkipped = skipped;
+    this.lastEnqueueInteractiveSkipped = interactiveSkipped;
 
     // 歌单为空：整体生成并开始播放（保持首次生成的随机/顺序起点行为）
     if (this.playlist.length === 0) {
@@ -967,7 +999,7 @@ export class PlayerController {
       this.setPlaying(false);
       this.currentTime = 0;
       this.duration = 0;
-      AppStore.savePlaylistFile(this.playlist, startIndex, 0, this.currentQualityCode);
+      AppStore.savePlaylistFile(this.playlist, startIndex, 0, this.currentQualityCode, this.designatedNextQueue);
       if (toAdd.length > 0) {
         let startMsg: string = `已添加 ${toAdd.length} 首，开始播放`;
         if (interactiveSkipped > 0) {
@@ -1001,14 +1033,19 @@ export class PlayerController {
     this.playlist = this.playlist.slice(0, insertAt).concat(toAdd, this.playlist.slice(insertAt));
     this.playlistVersion++;
     // 指定下一首登记（v0.8-part1 FR-005）：实际插到当前条目游程之后（afterCurrent，
-    // 含游程在队尾、insertAt 恰等于原长度的场景）时 toAdd 复合键按插入顺序入 FIFO；
-    // 命中去重项不在 toAdd、非 insertAfterCurrent 的纯追加队尾路径不登记
+    // 含游程在队尾、insertAt 恰等于原长度的场景）时 toAdd 复合键整批前插 FIFO 队首——
+    // 与线性插入位置一致（最新紧跟当前条目），旧指定项未消费时最新「下一首播放」
+    // 仍兑现为下一首；命中去重项不在 toAdd、非 insertAfterCurrent 的纯追加队尾路径不登记
     if (afterCurrent) {
+      const designatedKeys: string[] = [];
       for (let i = 0; i < toAdd.length; i++) {
-        this.designatedNextQueue.push(BiliVideo.itemKeyOf(toAdd[i].bvid, toAdd[i].page));
+        designatedKeys.push(BiliVideo.itemKeyOf(toAdd[i].bvid, toAdd[i].page));
       }
+      this.designatedNextQueue = designatedKeys.concat(this.designatedNextQueue);
+      Logger.log('player', 'designated next register',
+        `enqueue count=${designatedKeys.length} total=${this.designatedNextQueue.length}`);
     }
-    AppStore.savePlaylistFile(this.playlist, this.currentIndex, this.currentTime, this.currentQualityCode);
+    AppStore.savePlaylistFile(this.playlist, this.currentIndex, this.currentTime, this.currentQualityCode, this.designatedNextQueue);
     let msg: string = afterCurrent
       ? `已插入 ${toAdd.length} 首到当前播放之后`
       : `已追加 ${toAdd.length} 首到歌单末尾`;
@@ -1225,7 +1262,7 @@ export class PlayerController {
       }
       this.mediaSession.updateTrack(BiliVideo.itemKeyOf(item.bvid, item.page), item.title,
         item.duration > 0 ? item.duration * 1000 : 0, item.cover, item.ownerName);
-      AppStore.savePlaylistFile(this.playlist, this.currentIndex, 0, this.currentQualityCode);
+      AppStore.savePlaylistFile(this.playlist, this.currentIndex, 0, this.currentQualityCode, this.designatedNextQueue);
     } catch (err) {
       if (token !== this.loadToken) {
         return;
@@ -1233,7 +1270,7 @@ export class PlayerController {
       const error = err as BusinessError;
       this.isPreparing = false;
       // 失败条目即时持久化为当前条目（FR-014）：进度归 0，跳过成功后由成功路径覆盖写
-      AppStore.savePlaylistFile(this.playlist, this.currentIndex, 0, this.currentQualityCode);
+      AppStore.savePlaylistFile(this.playlist, this.currentIndex, 0, this.currentQualityCode, this.designatedNextQueue);
       const info: PlayErrorInfo = PlayerController.classifyPlayError(error.message);
       // BiliService 抛 plain Error 时 code 为 undefined，typeof 归一为 0（取流失败通常无错误码语义）
       const code: number = typeof error.code === 'number' ? error.code : 0;
@@ -1347,8 +1384,8 @@ export class PlayerController {
 
   private shuffleHistory: string[] = [];
   private forwardHistory: string[] = [];
-  // —— 随机分层排除（v0.8-part1）：会话已播集（bvid 条目级，'playing' 出声写入）与
-  // 指定下一首队列（复合键 FIFO，源页 insertAfterCurrent 插入登记），均不持久化 ——
+  // —— 随机分层排除（v0.8-part1）：会话已播集（bvid 条目级，'playing' 出声写入，不持久化）与
+  // 指定下一首队列（复合键 FIFO，源页 insertAfterCurrent 插入登记；随 playlist.json 持久化，v0.8-part4）——
   private sessionPlayedSet: Set<string> = new Set<string>();
   private designatedNextQueue: string[] = [];
 
@@ -1790,7 +1827,7 @@ export class PlayerController {
     if (this.currentIndex >= 0) {
       this.currentIndex += 1;
     }
-    AppStore.savePlaylistFile(this.playlist, this.currentIndex, this.currentTime, this.currentQualityCode);
+    AppStore.savePlaylistFile(this.playlist, this.currentIndex, this.currentTime, this.currentQualityCode, this.designatedNextQueue);
     this.statusMsg = `已添加「${video.title}」`;
     this.emitUi();
     await this.playIndex(insertIdx, 0);
@@ -1855,7 +1892,7 @@ export class PlayerController {
       }
     }
     this.playlistVersion++;
-    AppStore.savePlaylistFile(this.playlist, this.currentIndex, this.currentTime, this.currentQualityCode);
+    AppStore.savePlaylistFile(this.playlist, this.currentIndex, this.currentTime, this.currentQualityCode, this.designatedNextQueue);
   }
 
   async unfavoriteCurrent(): Promise<void> {
@@ -1896,7 +1933,7 @@ export class PlayerController {
       this.loadToken++;
       await this.player.resetPlayer();
       this.statusMsg = '已取消收藏，歌单已空';
-        AppStore.savePlaylistFile(this.playlist, -1, 0, 0);
+        AppStore.savePlaylistFile(this.playlist, -1, 0, 0, this.designatedNextQueue);
       } else {
         let targetIndex: number = this.currentIndex;
         let restoreForward: boolean = false;
@@ -1914,7 +1951,7 @@ export class PlayerController {
           'unfavorite target=%{public}s strategy=%{public}s',
           this.playlist[targetIndex].bvid, restoreForward ? 'forward' : 'successor');
         this.statusMsg = `已从 ${folderCount} 个收藏夹移除`;
-        AppStore.savePlaylistFile(this.playlist, targetIndex, 0, this.currentQualityCode);
+        AppStore.savePlaylistFile(this.playlist, targetIndex, 0, this.currentQualityCode, this.designatedNextQueue);
         await this.playIndex(targetIndex, 0, restoreForward);
       }
       this.emitUi();
@@ -2048,6 +2085,9 @@ export class PlayerController {
     if (qi >= 0) {
       this.designatedNextQueue.splice(qi, 1);
       Logger.log('player', 'designated next consumed on play', `key=${key}`);
+      // 消费即落盘（v0.8-part4 US1 FR-004）：播放消费路径无既有保存点，补写防重启复活已消费条目
+      AppStore.savePlaylistFile(this.playlist, this.currentIndex, this.currentTime, this.currentQualityCode,
+        this.designatedNextQueue);
     }
   }
 
@@ -2201,7 +2241,8 @@ export class PlayerController {
   // 越界下标自然丢弃（与 entries 失步防御），当前播放条目游程内下标剔除（当前条目原位不动，
   // 游程识别复用 getQueueEntryGroups 单一来源）；movers 与 kept 各自保序重组；
   // currentIndex 以当前条目复合键在重组后线性重定位（非下标换算）；不动播放器不打断播放；
-  // 随机模式的 shuffleHistory/forwardHistory 为复合键存储，键不随重组失效，零处理
+  // 随机模式的 shuffleHistory/forwardHistory 为复合键存储，键不随重组失效，零处理；
+  // designatedNextQueue 随移动同步（见函数内注释），保证随机模式下移动同样兑现为下一首
   moveFlatItems(indices: Set<number>, toEnd: boolean): number {
     if (indices.size === 0 || this.playlist.length === 0) {
       return 0;
@@ -2245,8 +2286,25 @@ export class PlayerController {
         }
       }
     }
+    // 指定下一首同步（随机模式的下一首由 designatedNextQueue 决定，仅改线性位置对随机
+    // 播放顺序无效）：movers 旧指定键先整体出队（移到最后不再兑现为下一首），
+    // 「下一首播放」再按移动后顺序整批前插队首，使队列面板移动在随机模式下同样生效
+    const moverKeys: string[] = [];
+    for (let i = 0; i < movers.length; i++) {
+      moverKeys.push(BiliVideo.itemKeyOf(movers[i].bvid, movers[i].page));
+    }
+    for (let i = this.designatedNextQueue.length - 1; i >= 0; i--) {
+      if (moverKeys.indexOf(this.designatedNextQueue[i]) >= 0) {
+        this.designatedNextQueue.splice(i, 1);
+      }
+    }
+    if (!toEnd) {
+      this.designatedNextQueue = moverKeys.concat(this.designatedNextQueue);
+      Logger.log('player', 'designated next register',
+        `move count=${moverKeys.length} total=${this.designatedNextQueue.length}`);
+    }
     this.playlistVersion++;
-    AppStore.savePlaylistFile(this.playlist, this.currentIndex, this.currentTime, this.currentQualityCode);
+    AppStore.savePlaylistFile(this.playlist, this.currentIndex, this.currentTime, this.currentQualityCode, this.designatedNextQueue);
     this.statusMsg = toEnd ? `已移动 ${movers.length} 首到队尾` : `已移动 ${movers.length} 首到当前播放之后`;
     this.emitUi();
     return movers.length;
@@ -2325,7 +2383,7 @@ export class PlayerController {
       this.loadToken++;
       await this.player.resetPlayer();
       this.statusMsg = `已从歌单移除 ${removedCount} 首，歌单已空`;
-      AppStore.savePlaylistFile(this.playlist, -1, 0, 0);
+      AppStore.savePlaylistFile(this.playlist, -1, 0, 0, this.designatedNextQueue);
     } else if (removingCurrent) {
       this.isPrepared = false;
       this.setPlaying(false);
@@ -2334,12 +2392,12 @@ export class PlayerController {
         target = 0;
       }
       this.statusMsg = `已从歌单移除 ${removedCount} 首`;
-      AppStore.savePlaylistFile(this.playlist, target, 0, this.currentQualityCode);
+      AppStore.savePlaylistFile(this.playlist, target, 0, this.currentQualityCode, this.designatedNextQueue);
       await this.playIndex(target, 0);
     } else {
       this.currentIndex -= removedBeforeCurrent;
       this.statusMsg = `已从歌单移除 ${removedCount} 首`;
-      AppStore.savePlaylistFile(this.playlist, this.currentIndex, this.currentTime, this.currentQualityCode);
+      AppStore.savePlaylistFile(this.playlist, this.currentIndex, this.currentTime, this.currentQualityCode, this.designatedNextQueue);
     }
     this.emitUi();
     if (targets.length > 0) {

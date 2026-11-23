@@ -184,4 +184,13 @@
 - v0.8-part3 无缝音质切换模拟器实测（build+ui，模拟器）：
   - 模拟器锁屏三步恢复：`power-shell wakeup` + `power-shell setmode 602` → `devecocli ui swipe 640 2600 640 1000 --speed 2000` 上滑解锁 → `hdc shell aa start -a EntryAbility -b com.biliradio.app` 拉回应用（锁屏后应用转后台）；防再锁 `power-shell timeout -o 600000` **仅实体机生效，模拟器无效**（模拟器长测中途再锁屏按三步恢复处置即可）；`devecocli ui` 无 back 命令，swipe 参数是 `--speed` 非 `--duration`；模拟器网络为 eth0 NAT（`NetUtil.isWifi()`=false、wlan0 无 AP 可连），Wi-Fi↔蜂窝翻转类用例（自动换档触发）在模拟器不可测
 
+- v0.8-part4 播放层 UX + 持久化模拟器实测（build+ui，模拟器）：
+  - recognize_ui_components 多模态模型 403（Invalid model）时视觉断言降级像素分析：PowerShell System.Drawing 按无障碍树 bounds 分区采样（白/深/彩色/中灰像素占比 + RGB 均值），行高（文字带高 + 带间距 = 行距像素）、选中主题色 vs 未选中灰、蒙层对比度均可量化判定；识别工具要求图片在 worktree 内（截图先拷入），像素分析脚本无此约束；toast 瞬态提示 UI 工具链抓不到，行为断言改走落盘日志（register/play/consumed 链）与 playlist.json 直读
+  - 指定名单「弹出即消费」路径下 `consumed on play` 日志不出现属正常：`randomIndex` 选曲时 `shift()` 弹队首（只有 `designated next play` 日志），`markSessionPlayed` 仅对仍留在 FIFO 的键（手动点播场景）补剔落盘；剩余 FIFO 由 13 处保存点顺带落盘，验余量直接读 playlist.json 的 designated 字段
+
+- v0.8-part4 底栏菜单 ListRow 化 + 玻璃统一模拟器实测（build+ui，模拟器）：
+  - `devecocli run` 偶发清空应用数据：一次重部署后 files 目录整体重建（订阅/播放列表/日志全失），下次部署又正常保留——长 UI 验证前先确认测试数据在位（`ls .../files/`），被清时按订阅→点播流程重建，勿当回归排查
+  - 队列仅剩一首时长验证中自然播完 → 队列空 → 播放层（overlay+迷你条）自动收起，界面跳回下层页面且无日志报警——长测中途界面「无故」消失先查 `state | completed` 再怀疑改动回归；`uitest` 点击在 sheet 弹出动画期偶发落空（点了无反应），重试一次即中，结论前勿单次点击定生死
+  - 面板底色统一比对法：同一背景页（播放页封面）下分别截两面板，System.Drawing 对无文字行距带采样 avgRGB/lumStd，磨砂面板方差 <2、两面板均值差 <1 即视觉一致；系统 bindSheet 默认蒙罩（约 20% 黑）比 GlassSheet 的 mask_heavy（浅色 35% 黑）浅约 5 个灰阶，统一蒙罩用 `maskColor: $r('app.color.mask_heavy')`
+
 （追加区条目积累后由整理轮整合进第 2/3 节对应板块并清空本区）

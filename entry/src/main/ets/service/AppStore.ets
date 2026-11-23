@@ -11,6 +11,8 @@ export class PlaylistSnapshot {
   items: BiliVideo[] = [];
   lastIndex: number = -1;
   lastPosMs: number = 0;
+  // 「下一首播放」指定名单（v0.8-part4 US1）：有序复合键列表，随队列文件同存取
+  designatedKeys: string[] = [];
 }
 
 export class AppStore {
@@ -57,7 +59,8 @@ export class AppStore {
     AppStore.prefs.flush().catch((): void => {});
   }
 
-  static savePlaylistFile(items: BiliVideo[], lastIndex: number, lastPosMs: number, lastQualityCode: number): void {
+  static savePlaylistFile(items: BiliVideo[], lastIndex: number, lastPosMs: number, lastQualityCode: number,
+    designatedKeys: string[]): void {
     AppStore.putNumber(Constants.KEY_LAST_INDEX, lastIndex);
     AppStore.putNumber(Constants.KEY_LAST_POS_MS, lastPosMs);
     AppStore.putNumber(Constants.KEY_LAST_QUALITY, lastQualityCode);
@@ -72,6 +75,7 @@ export class AppStore {
         'lastIndex': lastIndex,
         'lastPosMs': lastPosMs,
         'items': itemRecords,
+        'designated': designatedKeys,
       };
       FileUtil.writeTextFile(path, JSON.stringify(rec));
     } catch (e) {
@@ -104,6 +108,15 @@ export class AppStore {
       }
       if (root['lastPosMs'] !== undefined) {
         snapshot.lastPosMs = root['lastPosMs'] as number;
+      }
+      // 指定名单（v0.8-part4 US1）：旧文件缺字段按空名单，元素非 string 逐条丢弃
+      if (root['designated'] !== undefined) {
+        const designated: Object[] = root['designated'] as Object[];
+        for (let i = 0; i < designated.length; i++) {
+          if (typeof designated[i] === 'string') {
+            snapshot.designatedKeys.push(designated[i] as string);
+          }
+        }
       }
     } catch (e) {
       hilog.warn(Constants.LOG_DOMAIN, Constants.LOG_TAG, 'loadPlaylistFile failed');

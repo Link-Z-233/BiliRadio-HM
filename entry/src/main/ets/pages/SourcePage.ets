@@ -392,7 +392,10 @@ struct SourcePage {
       this.stampFavSource(finalItems);
       this.controller.loadPlaylistAndPlay(finalItems, 0, insertAfterCurrent, favPath)
         .then((result: EnqueueResult): void => {
-          this.getUIContext().getPromptAction().showToast({ message: PlayerController.enqueueToast(result) });
+          this.getUIContext().getPromptAction().showToast({
+            message: PlayerController.enqueueToast(result, this.controller.lastEnqueueSkipped,
+              this.controller.lastEnqueueInteractiveSkipped)
+          });
           this.enqueueInFlight = false;
         })
         .catch((): void => {
@@ -742,7 +745,6 @@ struct SourcePage {
     });
   }
 
-  // 入队 + toast 分型反馈（queue-redesign：已加入队列/开始播放/已在队列中）；
   // 单击路径插入位置受「单集插入位置」设置控制（US3，点击时实时读取生效，
   // 多选按钮为显式参/添加订阅/历史面板不受影响）；
   // 收藏夹源互动稿豁免拦截（修订⑩）：单击/+ 均随源类型放行
@@ -752,7 +754,10 @@ struct SourcePage {
     this.controller.loadPlaylistAndPlay(items, 0, insertAfterCurrent,
       this.sub.type === Subscription.TYPE_FAV)
       .then((result: EnqueueResult): void => {
-        this.getUIContext().getPromptAction().showToast({ message: PlayerController.enqueueToast(result) });
+        this.getUIContext().getPromptAction().showToast({
+          message: PlayerController.enqueueToast(result, this.controller.lastEnqueueSkipped,
+            this.controller.lastEnqueueInteractiveSkipped)
+        });
       })
       .catch((): void => {
       });
@@ -800,15 +805,16 @@ struct SourcePage {
     });
   }
 
-  // 多选底部独立悬浮按钮（FR-016/US2）：不可见全宽 Row 承载三枚独立胶囊——左「队列末播放 (N)」
-  // （accent 底 + fg_on_dark 主按钮，追加队尾）/ 中「标记已看完」（card 底 + accent 描边）/
-  // 右「下一首播放 (N)」（accent 底 + fg_on_dark 主按钮，插至当前播放之后）；
+  // 多选底部独立悬浮按钮（FR-016/US2 + v0.8-part4 US7/US8）：不可见全宽 Row 承载三枚独立胶囊——
+  // 左「添加至队列末」（accent 底 + fg_on_dark 主按钮，追加队尾；文案去播放顺序歧义，无选中计数，
+  // 顶栏「已选 N 项」为计数唯一展示点）/ 中「标记已看完」（card 底 + accent 描边）/
+  // 右「下一首播放」（accent 底 + fg_on_dark 主按钮，插至当前播放之后，无计数）；
   // 无选中三按钮共享禁用（opacity 降档 + enabled false）；bottom 避让 MiniPlayer 与导航区；
   // 左 START/中 OPACITY/右 END 滑入滑出过渡，随 selectMode 同一 animateTo 驱动（进出互逆）
   @Builder
   private selectActionBar() {
     Row() {
-      Text(`队列末播放 (${this.selectedKeys.size})`)
+      Text('添加至队列末')
         .fontSize(Constants.TOKEN_FONT_BODY_S)
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.fg_on_dark'))
@@ -859,7 +865,7 @@ struct SourcePage {
           this.confirmMarkWatched();
         })
         .transition(TransitionEffect.OPACITY)
-      Text(`下一首播放 (${this.selectedKeys.size})`)
+      Text('下一首播放')
         .fontSize(Constants.TOKEN_FONT_BODY_S)
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.fg_on_dark'))

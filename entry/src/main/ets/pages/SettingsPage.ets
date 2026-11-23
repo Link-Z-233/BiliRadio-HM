@@ -59,7 +59,7 @@ export struct SettingsPage {
   @Local cellularQuality: QualityTier = QualityTier.Q132K;
   @Local showQualitySheet: boolean = false;
   @Local qualityEditTarget: string = 'wifi'; // 'wifi' | 'cellular'
-  // 单集插入位置（US3）：true=下一首播放 false=队列末播放（默认），仅源页单击入队路径生效
+  // 单集插入位置（US3）：true=下一首播放 false=添加至队列末（默认），仅源页单击入队路径生效
   @Local singleInsertNext: boolean = false;
   @Local showSingleInsertSheet: boolean = false;
   // 订阅管理动作弹窗（v0.8-part2 US2）：系统组合并行触发，选项分发导出/导入
@@ -202,11 +202,11 @@ export struct SettingsPage {
   // —— 单集插入位置（US3）——
 
   private singleInsertLabel(): string {
-    return this.singleInsertNext ? '下一首播放' : '队列末播放';
+    return this.singleInsertNext ? '下一首播放' : '添加至队列末';
   }
 
   private singleInsertOptions(): string[] {
-    return ['队列末播放', '下一首播放'];
+    return ['添加至队列末', '下一首播放'];
   }
 
   private applySingleInsert(next: boolean): void {

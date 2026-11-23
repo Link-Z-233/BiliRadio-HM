@@ -50,7 +50,7 @@ export class Constants {
   static readonly KEY_ANOMALY_BVIDS: string = 'anomalyBvids';
   // 失效 bvid 集（JSON 数组字符串，per-bvid 持久化 X 标记，-404 判定，不云同步）
   static readonly KEY_INVALID_BVIDS: string = 'invalidBvids';
-  // 单集插入位置（1=下一首播放 0=队列末播放，默认队列末播放；仅源页单击入队路径生效）
+  // 单集插入位置（1=下一首播放 0=添加至队列末，默认添加至队列末；仅源页单击入队路径生效）
   static readonly KEY_SINGLE_INSERT_NEXT: string = 'singleInsertNext';
 
   // —— AppStorage 键 ——
@@ -114,6 +114,9 @@ export class Constants {
   static readonly SLEEP_TIMER_MAX_HOURS: number = 12;
   static readonly SLEEP_TIMER_MIN_SECONDS: number = 60;
   static readonly SLEEP_TIMER_TICK_MS: number = 1000;
+  // 定时选档生效延迟：晚于面板收起动画（窄屏 sheet 约 300ms / 宽屏淡出 200ms），
+  // 防「取消定时」红行条件插入被退出动画带出闪红
+  static readonly SLEEP_TIMER_APPLY_DELAY_MS: number = 400;
   // 悬浮播放胶囊占位高度：胶囊高约 60 + 底部 8 偏移 + 余量，供各滚动页底部预留
   static readonly MINI_PLAYER_CLEARANCE: number = 88;
   static readonly DEBUG_TAP_WINDOW_MS: number = 2000;
@@ -228,10 +231,14 @@ export class Constants {
   static readonly FAV_PAGE_SIZE: number = 20;
 
   // —— 队列入队反馈（queue-redesign US6）：三分型 toast 文案 ——
-  static readonly TOAST_ENQUEUE_APPENDED: string = '已加入队列';
+  static readonly TOAST_ENQUEUE_APPENDED: string = '已入队';
   static readonly TOAST_ENQUEUE_STARTED: string = '开始播放';
   static readonly TOAST_ENQUEUE_DUPLICATE: string = '已在队列中';
   static readonly TOAST_ENQUEUE_FAILED: string = '添加失败';
+  // —— 批量入队跳过明细 toast（N 由跳过数代入）：单一类型点名重复/互动，双类型合并总数 ——
+  static readonly TOAST_SKIP_DUPLICATE: string = '跳过N个重复视频';
+  static readonly TOAST_SKIP_INTERACTIVE: string = '跳过N个互动视频';
+  static readonly TOAST_SKIP_MIXED: string = '跳过N个视频';
   // —— 清除已播（queue-redesign US4）：无可清 toast 与二次确认框文案 ——
   static readonly TOAST_QUEUE_NO_PLAYED: string = '没有可清除的已播内容';
   static readonly DIALOG_CLEAR_PLAYED_TITLE: string = '清除已播';
@@ -374,6 +381,8 @@ export class Constants {
   static readonly TOKEN_FONT_24: number = 24;
   static readonly TOKEN_FONT_56: number = 56;
   static readonly TOKEN_ICON_BTN: number = 40;
+  // 详情简介行高（v0.8-part4 US4）：正文多行可读行距，替代 detailSheet 既有裸 24
+  static readonly TOKEN_LINE_HEIGHT_DESC: number = 28;
   // 圆角：基础档（plan）+ 实测扩展档
   static readonly TOKEN_RADIUS_S: number = 8;
   static readonly TOKEN_RADIUS_M: number = 12;

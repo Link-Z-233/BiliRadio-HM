@@ -13,6 +13,7 @@ import { AppStore } from '../service/AppStore';
 import { BiliSession } from '../service/BiliSession';
 import { AudioTrack, AudioQuality, QualityTier } from '../model/AudioQuality';
 import { connectBool, connectNum, connectStr, BoolState, NumState, StrState } from '../service/V2State';
+import { ListRow } from '../component/ListRow';
 
 // 颜色全部使用 base/dark 双份颜色资源：浅色/深色外观下自动匹配（见 resources/base|dark/element/color.json）
 
@@ -81,6 +82,8 @@ export struct PlayerOverlay {
   // 播完暂停模式（queue-redesign US3）：激活时 timer 入口仅图标高亮，不显示剩余数字
   @Local sleepTimerPlayToEof: boolean = false;
   @Local sleepTimerRemaining: number = 0;
+  // 武装总时长（秒）：定时面板激活档位 ✓ 标记与自定义行值显示依据
+  @Local sleepTimerTotal: number = 0;
   @Local pickerHour: number = 0;
   @Local pickerMinute: number = 0;
   @Local trackView: number = 0;
@@ -232,6 +235,28 @@ export struct PlayerOverlay {
     this.sleepTimerActive = st.active;
     this.sleepTimerPlayToEof = st.isPlayToEofActive();
     this.sleepTimerRemaining = st.getRemainingSeconds();
+    this.sleepTimerTotal = st.totalSeconds;
+  }
+
+  private isCustomTimerActive(): boolean {
+    return this.sleepTimerActive && !this.sleepTimerPlayToEof &&
+      !Constants.SLEEP_TIMER_PRESETS.includes(this.sleepTimerTotal);
+  }
+
+  private customTimerValueText(): string {
+    if (!this.isCustomTimerActive()) {
+      return '';
+    }
+    return `${Math.round(this.sleepTimerTotal / 60)} 分钟`;
+  }
+
+  // 定时选档生效延迟（FR-014）：生效与收起同帧时，条件插入的「取消定时」红行会被关闭
+  // 动画带出（闪红）；收起动画（窄屏 sheet / 宽屏淡出）播完再生效，面板内容冻结
+  private applyTimerActionAfterClose(apply: () => void): void {
+    this.showSleepTimer.value = false;
+    setTimeout(() => {
+      apply();
+    }, Constants.SLEEP_TIMER_APPLY_DELAY_MS);
   }
 
   // 光晕动画改由光晕节点自身 animation 属性承载（节点级隔离）：animateTo 会波及同帧内
@@ -446,18 +471,27 @@ export struct PlayerOverlay {
 
   // 播放模式四态映射符号：顺序/倒序=order_play（倒序另经 playModeRotate 旋转 180°）/ 随机=shuffle / 单曲循环=repeat_1
   private playModeIcon(): Resource {
-    if (this.playMode === MusicPlayMode.RANDOM) {
+    return this.modeIconOf(this.playMode);
+  }
+
+  // 倒序模式图标旋转角（度）：仅 REVERSE 旋转 180°，表达「方向相反=倒序」
+  private playModeRotate(): number {
+    return this.modeRotateOf(this.playMode);
+  }
+
+  // 面板行图标四态映射（v0.8-part4 US5 FR-007）：与底栏模式按钮同源，按枚举取图（不依赖当前模式）
+  private modeIconOf(mode: MusicPlayMode): Resource {
+    if (mode === MusicPlayMode.RANDOM) {
       return $r('sys.symbol.shuffle');
     }
-    if (this.playMode === MusicPlayMode.REPEAT_ONE) {
+    if (mode === MusicPlayMode.REPEAT_ONE) {
       return $r('sys.symbol.repeat_1');
     }
     return $r('sys.symbol.order_play');
   }
 
-  // 倒序模式图标旋转角（度）：仅 REVERSE 旋转 180°，表达「方向相反=倒序」
-  private playModeRotate(): number {
-    return this.playMode === MusicPlayMode.REVERSE ? 180 : 0;
+  private modeRotateOf(mode: MusicPlayMode): number {
+    return mode === MusicPlayMode.REVERSE ? 180 : 0;
   }
 
   // 音质入口按钮短名（T017，替代波形图标）：dash 流式 → 当前音轨码精确档名
@@ -486,36 +520,44 @@ export struct PlayerOverlay {
   }
 
   @Builder
+  speedPanelContent() {
+    Column() {
+      Text('播放倍速')
+        .fontSize(Constants.TOKEN_FONT_TITLE)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.text_primary'))
+        .margin({ bottom: Constants.TOKEN_SPACE_14 })
+
+      // 行列表化（US5 扩展）：与播放顺序/设置页行视觉统一，当前档主题色高亮 + 行尾 ✓
+      ForEach(PLAYBACK_RATES, (rate: number) => {
+        ListRow({
+          title: PlayerController.rateLabel(rate),
+          selected: rate === this.playbackRate,
+          showDivider: rate !== PLAYBACK_RATES[PLAYBACK_RATES.length - 1],
+          rowAction: (): void => {
+            this.controller.setPlaybackRate(rate);
+            this.showSpeed.value = false;
+          }
+        })
+      }, (rate: number) => rate.toString())
+    }
+    .width('100%')
+    .padding(Constants.TOKEN_SPACE_20)
+    // 玻璃公式（US3 FR-013）：窄轨 sheet 背景透明，内容根自绘与队列/详情同款面板色+模糊+顶分隔线；
+    // 宽轨 overlay 卡片维持现状（属性取空值）
+    .backgroundColor(this.isWide ? Color.Transparent : $r('app.color.sheet_panel_background'))
+    .backdropBlur(this.isWide ? 0 : Constants.GLASS_BLUR)
+    .border({ width: { top: this.isWide ? 0 : 1 }, color: $r('app.color.sheet_top_separator') })
+  }
+
+  // 宽屏外壳（v0.8-part4 US3）：mask_heavy + 居中 76% 卡片 + 点击关闭；窄屏同内容走底栏 bindSheet 底部浮窗
+  @Builder
   speedPanel() {
     Column() {
       Column() {
-        Text('播放倍速')
-          .fontSize(Constants.TOKEN_FONT_TITLE)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .margin({ bottom: Constants.TOKEN_SPACE_14 })
-
-        Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center }) {
-          ForEach(PLAYBACK_RATES, (rate: number) => {
-            Button(PlayerController.rateLabel(rate))
-              .width('30%')
-              .height(40)
-              .backgroundColor(rate === this.playbackRate ? this.tintBg() : $r('app.color.btn_glass'))
-              .backdropBlur(Constants.GLASS_BLUR)
-              .fontColor(rate === this.playbackRate ? $r('app.color.text_primary') : this.textPrimary())
-              .borderRadius(Constants.TOKEN_RADIUS_XL)
-              .fontSize(Constants.TOKEN_FONT_BODY_M)
-              .margin(Constants.TOKEN_SPACE_XS)
-              .onClick(() => {
-                this.controller.setPlaybackRate(rate);
-                this.showSpeed.value = false;
-              })
-          }, (rate: number) => rate.toString())
-        }
-        .width('100%')
+        this.speedPanelContent()
       }
       .width('76%')
-      .padding(Constants.TOKEN_SPACE_20)
       .borderRadius(Constants.TOKEN_RADIUS_L)
       .backgroundColor($r('app.color.page_background'))
     }
@@ -530,37 +572,48 @@ export struct PlayerOverlay {
     })
   }
 
+  // 播放顺序内容（v0.8-part4 US5 FR-007）：ListRow 全宽行列表——行图标四态映射（倒序旋转 180°）、
+  // 行尾 ✓ 标当前模式；宽屏 overlay 与窄屏 sheet 双轨同形
+  @Builder
+  modePanelContent() {
+    Column() {
+      Text('播放顺序')
+        .fontSize(Constants.TOKEN_FONT_TITLE)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.text_primary'))
+        .margin({ bottom: Constants.TOKEN_SPACE_14 })
+
+      ForEach(PLAY_MODES, (mode: MusicPlayMode) => {
+        ListRow({
+          title: PlayerController.modeLabel(mode),
+          rowIcon: this.modeIconOf(mode),
+          iconRotate: this.modeRotateOf(mode),
+          selected: mode === this.playMode,
+          showDivider: mode !== MusicPlayMode.REVERSE,
+          rowAction: (): void => {
+            this.controller.setPlayMode(mode);
+            this.showMode.value = false;
+          }
+        })
+      }, (mode: MusicPlayMode) => `${mode}`)
+    }
+    .width('100%')
+    .padding(Constants.TOKEN_SPACE_20)
+    // 玻璃公式（US3 FR-013）：窄轨 sheet 背景透明，内容根自绘与队列/详情同款面板色+模糊+顶分隔线；
+    // 宽轨 overlay 卡片维持现状（属性取空值）
+    .backgroundColor(this.isWide ? Color.Transparent : $r('app.color.sheet_panel_background'))
+    .backdropBlur(this.isWide ? 0 : Constants.GLASS_BLUR)
+    .border({ width: { top: this.isWide ? 0 : 1 }, color: $r('app.color.sheet_top_separator') })
+  }
+
+  // 宽屏外壳（v0.8-part4 US3）：mask_heavy + 居中 76% 卡片 + 点击关闭；窄屏同内容走底栏 bindSheet 底部浮窗
   @Builder
   modePanel() {
     Column() {
       Column() {
-        Text('播放顺序')
-          .fontSize(Constants.TOKEN_FONT_TITLE)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .margin({ bottom: Constants.TOKEN_SPACE_14 })
-
-        Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center }) {
-          ForEach(PLAY_MODES, (mode: MusicPlayMode) => {
-            Button(PlayerController.modeLabel(mode))
-              .width('44%')
-              .height(40)
-              .backgroundColor(mode === this.playMode ? this.tintBg() : $r('app.color.btn_glass'))
-              .backdropBlur(Constants.GLASS_BLUR)
-              .fontColor(mode === this.playMode ? $r('app.color.text_primary') : this.textPrimary())
-              .borderRadius(Constants.TOKEN_RADIUS_XL)
-              .fontSize(Constants.TOKEN_FONT_BODY_M)
-              .margin(Constants.TOKEN_SPACE_6)
-              .onClick(() => {
-                this.controller.setPlayMode(mode);
-                this.showMode.value = false;
-              })
-          }, (mode: MusicPlayMode) => `${mode}`)
-        }
-        .width('100%')
+        this.modePanelContent()
       }
       .width('76%')
-      .padding(Constants.TOKEN_SPACE_20)
       .borderRadius(Constants.TOKEN_RADIUS_L)
       .backgroundColor($r('app.color.page_background'))
     }
@@ -575,93 +628,88 @@ export struct PlayerOverlay {
   }
 
   @Builder
+  sleepTimerPanelContent() {
+    Column() {
+      Text('定时关闭')
+        .fontSize(Constants.TOKEN_FONT_TITLE)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.text_primary'))
+        .margin({ bottom: Constants.TOKEN_SPACE_10 })
+
+      Text('设置计时结束后，将暂停播放并提醒')
+        .fontSize(Constants.TOKEN_FONT_BODY)
+        .fontColor($r('app.color.text_secondary'))
+        .textAlign(TextAlign.Center)
+        .width('100%')
+        .margin({ bottom: Constants.TOKEN_SPACE_6 })
+
+      // 定时面板与底层单选模型对齐（后选取代先选）；选档生效延迟到收起动画之后（FR-014 防闪红）
+      ForEach(Constants.SLEEP_TIMER_PRESETS, (seconds: number) => {
+        ListRow({
+          title: this.presetLabel(seconds),
+          selected: this.sleepTimerActive && !this.sleepTimerPlayToEof && this.sleepTimerTotal === seconds,
+          showDivider: seconds !== Constants.SLEEP_TIMER_PRESETS[Constants.SLEEP_TIMER_PRESETS.length - 1],
+          rowAction: (): void => {
+            this.applyTimerActionAfterClose((): void => {
+              SleepTimerController.getInstance().startTimer(seconds);
+            });
+          }
+        })
+      }, (seconds: number) => `${seconds}`)
+
+      ListRow({
+        title: '自定义',
+        valueText: this.customTimerValueText(),
+        selected: this.isCustomTimerActive(),
+        showArrow: true,
+        showDivider: true,
+        rowAction: (): void => {
+          this.pickerHour = 0;
+          this.pickerMinute = 0;
+          this.showSleepTimerPicker.value = true;
+        }
+      })
+
+      ListRow({
+        title: '播完暂停',
+        selected: this.sleepTimerPlayToEof,
+        showDivider: this.sleepTimerActive,
+        rowAction: (): void => {
+          this.applyTimerActionAfterClose((): void => {
+            SleepTimerController.getInstance().armPlayToEof();
+          });
+        }
+      })
+
+      if (this.sleepTimerActive) {
+        ListRow({
+          title: '取消定时',
+          danger: true,
+          rowAction: (): void => {
+            this.applyTimerActionAfterClose((): void => {
+              SleepTimerController.getInstance().cancelTimer();
+            });
+          }
+        })
+      }
+    }
+    .width('100%')
+    .padding(Constants.TOKEN_SPACE_20)
+    // 玻璃公式（US3 FR-013）：窄轨 sheet 背景透明，内容根自绘与队列/详情同款面板色+模糊+顶分隔线；
+    // 宽轨 overlay 卡片维持现状（属性取空值）
+    .backgroundColor(this.isWide ? Color.Transparent : $r('app.color.sheet_panel_background'))
+    .backdropBlur(this.isWide ? 0 : Constants.GLASS_BLUR)
+    .border({ width: { top: this.isWide ? 0 : 1 }, color: $r('app.color.sheet_top_separator') })
+  }
+
+  // 宽屏外壳（v0.8-part4 US3）：mask_heavy + 居中 76% 卡片 + 点击关闭；窄屏同内容走底栏 bindSheet 底部浮窗
+  @Builder
   sleepTimerPanel() {
     Column() {
       Column() {
-        Text('定时关闭')
-          .fontSize(Constants.TOKEN_FONT_TITLE)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .margin({ bottom: Constants.TOKEN_SPACE_10 })
-
-        Text('设置计时结束后，将暂停播放并提醒')
-          .fontSize(Constants.TOKEN_FONT_BODY)
-          .fontColor($r('app.color.text_secondary'))
-          .textAlign(TextAlign.Center)
-          .width('100%')
-          .margin({ bottom: Constants.TOKEN_SPACE_14 })
-
-        Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center }) {
-          ForEach(Constants.SLEEP_TIMER_PRESETS, (seconds: number) => {
-            Button(this.presetLabel(seconds))
-              .width('30%')
-              .height(40)
-              .backgroundColor($r('app.color.btn_glass'))
-              .backdropBlur(Constants.GLASS_BLUR)
-              .fontColor(this.textPrimary())
-              .borderRadius(Constants.TOKEN_RADIUS_XL)
-              .fontSize(Constants.TOKEN_FONT_BODY_M)
-              .margin(Constants.TOKEN_SPACE_XS)
-              .onClick(() => {
-                SleepTimerController.getInstance().startTimer(seconds);
-                this.showSleepTimer.value = false;
-              })
-          }, (seconds: number) => `${seconds}`)
-
-          Button('自定义')
-            .width('30%')
-            .height(40)
-            .backgroundColor($r('app.color.btn_glass'))
-            .backdropBlur(Constants.GLASS_BLUR)
-            .fontColor(this.textPrimary())
-            .borderRadius(Constants.TOKEN_RADIUS_XL)
-            .fontSize(Constants.TOKEN_FONT_BODY_M)
-            .margin(Constants.TOKEN_SPACE_XS)
-            .onClick(() => {
-              this.pickerHour = 0;
-              this.pickerMinute = 0;
-              this.showSleepTimerPicker.value = true;
-            })
-
-          Button('播完暂停')
-            .width('30%')
-            .height(40)
-            .backgroundColor(this.sleepTimerPlayToEof ? this.tintBg() : $r('app.color.btn_glass'))
-            .backdropBlur(Constants.GLASS_BLUR)
-            .fontColor($r('app.color.text_primary'))
-            .borderRadius(Constants.TOKEN_RADIUS_XL)
-            .fontSize(Constants.TOKEN_FONT_BODY_M)
-            .margin(Constants.TOKEN_SPACE_XS)
-            .onClick(() => {
-              const st: SleepTimerController = SleepTimerController.getInstance();
-              if (st.isPlayToEofActive()) {
-                st.disarmPlayToEof();
-              } else {
-                st.armPlayToEof();
-              }
-              this.showSleepTimer.value = false;
-            })
-        }
-        .width('100%')
-
-        if (this.sleepTimerActive) {
-          Button('取消定时')
-            .width('100%')
-            .height(40)
-            .backgroundColor($r('app.color.btn_glass'))
-            .backdropBlur(Constants.GLASS_BLUR)
-            .fontColor($r('app.color.text_primary'))
-            .borderRadius(Constants.TOKEN_RADIUS_XL)
-            .fontSize(Constants.TOKEN_FONT_BODY_M)
-            .margin({ top: Constants.TOKEN_SPACE_S })
-            .onClick(() => {
-              SleepTimerController.getInstance().cancelTimer();
-              this.showSleepTimer.value = false;
-            })
-        }
+        this.sleepTimerPanelContent()
       }
       .width('76%')
-      .padding(Constants.TOKEN_SPACE_20)
       .borderRadius(Constants.TOKEN_RADIUS_L)
       .backgroundColor($r('app.color.page_background'))
     }
@@ -675,64 +723,67 @@ export struct PlayerOverlay {
     })
   }
 
-  // 音质面板（audio-quality-settings FR-005）：dash 源列出实际下发音轨（当前档高亮，点选换档并写回默认）；
+  // 音质面板内容（audio-quality-settings FR-005）：dash 源列出实际下发音轨（当前档高亮，点选换档并写回默认）；
   // 空闲源显示将用档（缓存上次实际档优先，无缓存回退设置默认档）；durl 兜底流为「默认」单选项
+  @Builder
+  qualityPanelContent() {
+    Column() {
+      Text('音质选择')
+        .fontSize(Constants.TOKEN_FONT_TITLE)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.text_primary'))
+        .margin({ bottom: Constants.TOKEN_SPACE_14 })
+
+      if (this.currentTrackSource === 'dash' && this.availableTracks.length > 0) {
+        // 行列表化（US5 扩展）：dash 音轨普通行，当前档主题色高亮 + 行尾 ✓
+        ForEach(this.availableTracks, (track: AudioTrack) => {
+          ListRow({
+            title: AudioQuality.trackLabel(track.id),
+            selected: track.id === this.currentQualityCode,
+            showDivider: track !== this.availableTracks[this.availableTracks.length - 1],
+            rowAction: (): void => {
+              this.showQuality = false;
+              this.controller.setQualityTier(AudioQuality.tierOfTrackId(track.id), true);
+            }
+          })
+        }, (track: AudioTrack) => `${track.id}`)
+      } else if (this.currentTrackSource === '') {
+        Text(this.qualityEntryLabel())
+          .fontSize(Constants.TOKEN_FONT_BODY_L)
+          .fontColor($r('app.color.text_primary'))
+          .margin({ bottom: Constants.TOKEN_SPACE_6 })
+        Text('起播后显示实际可用音轨')
+          .fontSize(Constants.TOKEN_FONT_BODY)
+          .fontColor(this.textSecondary())
+          .textAlign(TextAlign.Center)
+          .width('100%')
+      } else {
+        ListRow({
+          title: '默认',
+          selected: true,
+          rowAction: (): void => {
+            this.showQuality = false;
+          }
+        })
+      }
+    }
+    .width('100%')
+    .padding(Constants.TOKEN_SPACE_20)
+    // 玻璃公式（US3 FR-013）：窄轨 sheet 背景透明，内容根自绘与队列/详情同款面板色+模糊+顶分隔线；
+    // 宽轨 overlay 卡片维持现状（属性取空值）
+    .backgroundColor(this.isWide ? Color.Transparent : $r('app.color.sheet_panel_background'))
+    .backdropBlur(this.isWide ? 0 : Constants.GLASS_BLUR)
+    .border({ width: { top: this.isWide ? 0 : 1 }, color: $r('app.color.sheet_top_separator') })
+  }
+
+  // 宽屏外壳（v0.8-part4 US3）：mask_heavy + 居中 76% 卡片 + 点击关闭；窄屏同内容走底栏 bindSheet 底部浮窗
   @Builder
   qualityPanel() {
     Column() {
       Column() {
-        Text('音质选择')
-          .fontSize(Constants.TOKEN_FONT_TITLE)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .margin({ bottom: Constants.TOKEN_SPACE_14 })
-
-        if (this.currentTrackSource === 'dash' && this.availableTracks.length > 0) {
-          Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center }) {
-            ForEach(this.availableTracks, (track: AudioTrack) => {
-              Button(AudioQuality.trackLabel(track.id))
-                .width('44%')
-                .height(40)
-                .backgroundColor(track.id === this.currentQualityCode ? this.tintBg() : $r('app.color.btn_glass'))
-                .backdropBlur(Constants.GLASS_BLUR)
-                .fontColor(track.id === this.currentQualityCode ? $r('app.color.text_primary') : this.textPrimary())
-                .borderRadius(Constants.TOKEN_RADIUS_XL)
-                .fontSize(Constants.TOKEN_FONT_BODY_M)
-                .margin(Constants.TOKEN_SPACE_6)
-                .onClick(() => {
-                  this.showQuality = false;
-                  this.controller.setQualityTier(AudioQuality.tierOfTrackId(track.id), true);
-                })
-            }, (track: AudioTrack) => `${track.id}`)
-          }
-          .width('100%')
-        } else if (this.currentTrackSource === '') {
-          Text(this.qualityEntryLabel())
-            .fontSize(Constants.TOKEN_FONT_BODY_L)
-            .fontColor($r('app.color.text_primary'))
-            .margin({ bottom: Constants.TOKEN_SPACE_6 })
-          Text('起播后显示实际可用音轨')
-            .fontSize(Constants.TOKEN_FONT_BODY)
-            .fontColor(this.textSecondary())
-            .textAlign(TextAlign.Center)
-            .width('100%')
-        } else {
-          Button('默认')
-            .width('44%')
-            .height(40)
-            .backgroundColor(this.tintBg())
-            .backdropBlur(Constants.GLASS_BLUR)
-            .fontColor($r('app.color.text_primary'))
-            .borderRadius(Constants.TOKEN_RADIUS_XL)
-            .fontSize(Constants.TOKEN_FONT_BODY_M)
-            .margin(Constants.TOKEN_SPACE_6)
-            .onClick(() => {
-              this.showQuality = false;
-            })
-        }
+        this.qualityPanelContent()
       }
       .width('76%')
-      .padding(Constants.TOKEN_SPACE_20)
       .borderRadius(Constants.TOKEN_RADIUS_L)
       .backgroundColor($r('app.color.page_background'))
     }
@@ -747,81 +798,96 @@ export struct PlayerOverlay {
   }
 
   @Builder
+  sleepTimerPickerContent() {
+    Column() {
+      Text('自定义关闭时间')
+        .fontSize(Constants.TOKEN_FONT_TITLE)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.text_primary'))
+        .margin({ bottom: Constants.TOKEN_SPACE_14 })
+
+      Row() {
+        TextPicker({ range: this.hourRange(), selected: this.pickerHour })
+          .layoutWeight(1)
+          .height(160)
+          .onChange((value: string | string[], index: number | number[]) => {
+            this.pickerHour = index as number;
+          })
+
+        Text('小时')
+          .fontSize(Constants.TOKEN_FONT_BODY_M)
+          .fontColor($r('app.color.text_primary'))
+          .margin({ left: Constants.TOKEN_SPACE_S, right: Constants.TOKEN_SPACE_L })
+
+        TextPicker({ range: this.minuteRange(), selected: this.pickerMinute })
+          .layoutWeight(1)
+          .height(160)
+          .onChange((value: string | string[], index: number | number[]) => {
+            this.pickerMinute = index as number;
+          })
+
+        Text('分钟')
+          .fontSize(Constants.TOKEN_FONT_BODY_M)
+          .fontColor($r('app.color.text_primary'))
+          .margin({ left: Constants.TOKEN_SPACE_S })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Row({ space: Constants.TOKEN_SPACE_M }) {
+        Button('取消')
+          .layoutWeight(1)
+          .height(40)
+          .backgroundColor($r('app.color.btn_glass'))
+          .backdropBlur(Constants.GLASS_BLUR)
+          .fontColor(this.textPrimary())
+          .borderRadius(Constants.TOKEN_RADIUS_XL)
+          .fontSize(Constants.TOKEN_FONT_BODY_M)
+          .onClick(() => {
+            this.showSleepTimerPicker.value = false;
+            this.showSleepTimer.value = true;
+          })
+
+        Button('确定')
+          .layoutWeight(1)
+          .height(40)
+          .backgroundColor(this.tintBg())
+          .backdropBlur(Constants.GLASS_BLUR)
+          .fontColor($r('app.color.text_primary'))
+          .borderRadius(Constants.TOKEN_RADIUS_XL)
+          .fontSize(Constants.TOKEN_FONT_BODY_M)
+          .onClick(() => {
+            const totalSec: number = this.pickerHour * 3600 + this.pickerMinute * 60;
+            if (totalSec <= 0) {
+              this.getUIContext().getPromptAction().showToast({ message: '请选择至少 1 分钟', duration: 2000 });
+              return;
+            }
+            this.showSleepTimerPicker.value = false;
+            this.applyTimerActionAfterClose((): void => {
+              SleepTimerController.getInstance().startTimer(totalSec);
+            });
+          })
+      }
+      .width('100%')
+      .margin({ top: Constants.TOKEN_SPACE_14 })
+    }
+    .width('100%')
+    .padding(Constants.TOKEN_SPACE_20)
+    // 玻璃公式（US3 FR-013）：窄轨 sheet 背景透明，内容根自绘与队列/详情同款面板色+模糊+顶分隔线；
+    // 宽轨 overlay 卡片维持现状（属性取空值）
+    .backgroundColor(this.isWide ? Color.Transparent : $r('app.color.sheet_panel_background'))
+    .backdropBlur(this.isWide ? 0 : Constants.GLASS_BLUR)
+    .border({ width: { top: this.isWide ? 0 : 1 }, color: $r('app.color.sheet_top_separator') })
+  }
+
+  // 宽屏外壳（v0.8-part4 US3）：mask_heavy + 居中 76% 卡片 + 点击关闭；窄屏同内容走底栏 bindSheet 底部浮窗
+  @Builder
   sleepTimerPicker() {
     Column() {
       Column() {
-        Text('自定义关闭时间')
-          .fontSize(Constants.TOKEN_FONT_TITLE)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .margin({ bottom: Constants.TOKEN_SPACE_14 })
-
-        Row() {
-          TextPicker({ range: this.hourRange(), selected: this.pickerHour })
-            .layoutWeight(1)
-            .height(160)
-            .onChange((value: string | string[], index: number | number[]) => {
-              this.pickerHour = index as number;
-            })
-
-          Text('小时')
-            .fontSize(Constants.TOKEN_FONT_BODY_M)
-            .fontColor($r('app.color.text_primary'))
-            .margin({ left: Constants.TOKEN_SPACE_S, right: Constants.TOKEN_SPACE_L })
-
-          TextPicker({ range: this.minuteRange(), selected: this.pickerMinute })
-            .layoutWeight(1)
-            .height(160)
-            .onChange((value: string | string[], index: number | number[]) => {
-              this.pickerMinute = index as number;
-            })
-
-          Text('分钟')
-            .fontSize(Constants.TOKEN_FONT_BODY_M)
-            .fontColor($r('app.color.text_primary'))
-            .margin({ left: Constants.TOKEN_SPACE_S })
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
-
-        Row({ space: Constants.TOKEN_SPACE_M }) {
-          Button('取消')
-            .layoutWeight(1)
-            .height(40)
-            .backgroundColor($r('app.color.btn_glass'))
-            .backdropBlur(Constants.GLASS_BLUR)
-            .fontColor(this.textPrimary())
-            .borderRadius(Constants.TOKEN_RADIUS_XL)
-            .fontSize(Constants.TOKEN_FONT_BODY_M)
-            .onClick(() => {
-              this.showSleepTimerPicker.value = false;
-              this.showSleepTimer.value = true;
-            })
-
-          Button('确定')
-            .layoutWeight(1)
-            .height(40)
-            .backgroundColor(this.tintBg())
-            .backdropBlur(Constants.GLASS_BLUR)
-            .fontColor($r('app.color.text_primary'))
-            .borderRadius(Constants.TOKEN_RADIUS_XL)
-            .fontSize(Constants.TOKEN_FONT_BODY_M)
-            .onClick(() => {
-              const totalSec: number = this.pickerHour * 3600 + this.pickerMinute * 60;
-              if (totalSec <= 0) {
-                this.getUIContext().getPromptAction().showToast({ message: '请选择至少 1 分钟', duration: 2000 });
-                return;
-              }
-              SleepTimerController.getInstance().startTimer(totalSec);
-              this.showSleepTimerPicker.value = false;
-              this.showSleepTimer.value = false;
-            })
-        }
-        .width('100%')
-        .margin({ top: Constants.TOKEN_SPACE_14 })
+        this.sleepTimerPickerContent()
       }
       .width('76%')
-      .padding(Constants.TOKEN_SPACE_20)
       .borderRadius(Constants.TOKEN_RADIUS_L)
       .backgroundColor($r('app.color.page_background'))
     }
@@ -876,9 +942,12 @@ export struct PlayerOverlay {
         Text(this.trackDesc !== '' ? this.trackDesc : '暂无简介')
           .fontSize(Constants.TOKEN_FONT_BODY_M)
           .fontColor(this.trackDesc !== '' ? $r('app.color.detail_text') : $r('app.color.text_secondary'))
-          .lineHeight(24)
+          // 行高 token（v0.8-part4 US4 FR-008）：正文多行可读行距，替代裸 24
+          .lineHeight(Constants.TOKEN_LINE_HEIGHT_DESC)
           .width('100%')
           .textAlign(TextAlign.Start)
+          // 滚动条专属槽（v0.8-part4 US4）：内容右侧留白承载系统滚动条，滚动条不压简介文字
+          .padding({ right: Constants.TOKEN_SPACE_M })
       }
       .width('100%')
       .layoutWeight(1)
@@ -888,7 +957,8 @@ export struct PlayerOverlay {
     }
     .width('100%')
     .height('100%')
-    .padding({ left: Constants.TOKEN_SPACE_XL, right: Constants.TOKEN_SPACE_XL, top: Constants.TOKEN_SPACE_XS, bottom: Constants.TOKEN_SPACE_XL })
+    // 边距舒展（v0.8-part4 US4）：上边距 XS→M；左右/下已是 TOKEN_SPACE 系最大档 XL 维持
+    .padding({ left: Constants.TOKEN_SPACE_XL, right: Constants.TOKEN_SPACE_XL, top: Constants.TOKEN_SPACE_M, bottom: Constants.TOKEN_SPACE_XL })
     // 玻璃公式（v0.4-Part1-ux-fixes US6）：与队列面板同款面板色+顶部分隔线，blur 作用于 sheet 底色已转透明的下层内容
     .backgroundColor($r('app.color.sheet_panel_background'))
     .backdropBlur(Constants.GLASS_BLUR)
@@ -962,18 +1032,18 @@ export struct PlayerOverlay {
                     .alignItems(HorizontalAlign.Center)
                   }
 
+                  // 深色蒙层+白前景（v0.8-part4 US2 FR-005）：任意封面明度下可辨，同封面时长角标视觉语言
                   Row({ space: Constants.TOKEN_SPACE_XS }) {
                     SymbolGlyph($r('sys.symbol.play_round_rectangle'))
                       .fontSize(Constants.TOKEN_FONT_BODY_S)
-                      .fontColor([this.textPrimary()])
+                      .fontColor([$r('app.color.fg_on_dark')])
                     Text('视频')
                       .fontSize(Constants.TOKEN_FONT_AUX)
-                      .fontColor(this.textPrimary())
+                      .fontColor($r('app.color.fg_on_dark'))
                   }
                   .height(26)
                   .padding({ left: Constants.TOKEN_SPACE_10, right: Constants.TOKEN_SPACE_10 })
-                  .backgroundColor($r('app.color.btn_glass'))
-                  .backdropBlur(Constants.GLASS_BLUR)
+                  .backgroundColor($r('app.color.duration_badge_scrim'))
                   .borderRadius(13)
                   .margin(Constants.TOKEN_SPACE_S)
                   .enabled(this.trackBvid !== '')
@@ -1248,7 +1318,7 @@ export struct PlayerOverlay {
             .alignItems(VerticalAlign.Center)
             .margin({ top: this.isWide ? this.overlayHeightVp * Constants.PLAYER_WIDE_CTRL_GAP_RATIO : Constants.TOKEN_SPACE_M })
 
-            // 底部操作行（spec FR-006 / plan R6）：倍速/播放模式/定时/队列，沿用现有全局键开关
+            // 底部操作行（spec FR-009）：倍速/定时/音质/播放模式/队列（v0.8-part4 US6 换位），沿用现有全局键开关
             Row({ space: Constants.TOKEN_SPACE_M }) {
               Row({ space: Constants.TOKEN_SPACE_XS }) {
                 SymbolGlyph($r('sys.symbol.speed_multiple'))
@@ -1263,17 +1333,54 @@ export struct PlayerOverlay {
               .onClick(() => {
                 this.showSpeed.value = true;
               })
+              // 窄轨 bindSheet（v0.8-part4 US3）：isShow 取反派生（断点切换即时换形态）；
+              // onDisappear 带 !isWide 守卫——断点切宽触发关闭时不清标志，宽屏 overlay 无缝接管
+              .bindSheet(!this.isWide && this.showSpeed.value, this.speedPanelContent(), {
+                height: SheetSize.FIT_CONTENT,
+                dragBar: true,
+                showClose: false,
+                preferType: SheetType.BOTTOM,
+                backgroundColor: Color.Transparent,
+                maskColor: $r('app.color.mask_heavy'),
+                onDisappear: (): void => {
+                  if (!this.isWide) {
+                    this.showSpeed.value = false;
+                  }
+                }
+              })
 
-              Row() {
-                SymbolGlyph(this.playModeIcon())
-                  .fontSize(Constants.TOKEN_FONT_18)
-                  .fontColor([this.accentColor.value])
-                  .rotate({ angle: this.playModeRotate() })
+              Row({ space: Constants.TOKEN_SPACE_XS }) {
+                SymbolGlyph($r('sys.symbol.timer'))
+                  .fontSize(Constants.TOKEN_FONT_TITLE)
+                  .fontColor([this.sleepTimerActive ? this.accentColor.value : this.textPrimary()])
+                if (this.sleepTimerActive && !this.sleepTimerPlayToEof) {
+                  Text(this.formatRemaining(this.sleepTimerRemaining))
+                    .fontSize(Constants.TOKEN_FONT_BODY)
+                    .fontColor(this.accentColor.value)
+                }
+                if (this.sleepTimerPlayToEof) {
+                  SymbolGlyph($r('sys.symbol.pause'))
+                    .fontSize(Constants.TOKEN_FONT_BODY)
+                    .fontColor([this.accentColor.value])
+                }
               }
               .height(Constants.GLASS_ICON_BTN_SIZE)
               .padding({ left: Constants.TOKEN_SPACE_14, right: Constants.TOKEN_SPACE_14 })
               .onClick(() => {
-                this.showMode.value = true;
+                this.showSleepTimer.value = true;
+              })
+              .bindSheet(!this.isWide && this.showSleepTimer.value, this.sleepTimerPanelContent(), {
+                height: SheetSize.FIT_CONTENT,
+                dragBar: true,
+                showClose: false,
+                preferType: SheetType.BOTTOM,
+                backgroundColor: Color.Transparent,
+                maskColor: $r('app.color.mask_heavy'),
+                onDisappear: (): void => {
+                  if (!this.isWide) {
+                    this.showSleepTimer.value = false;
+                  }
+                }
               })
 
               // 音质入口（audio-quality-settings FR-005 + T017）：直接显示当前音质档位短名；
@@ -1289,21 +1396,43 @@ export struct PlayerOverlay {
               .onClick(() => {
                 this.showQuality = true;
               })
-
-              Row({ space: Constants.TOKEN_SPACE_XS }) {
-                SymbolGlyph($r('sys.symbol.timer'))
-                  .fontSize(Constants.TOKEN_FONT_TITLE)
-                  .fontColor([this.sleepTimerActive ? this.accentColor.value : this.textPrimary()])
-                if (this.sleepTimerActive && !this.sleepTimerPlayToEof) {
-                  Text(this.formatRemaining(this.sleepTimerRemaining))
-                    .fontSize(Constants.TOKEN_FONT_BODY)
-                    .fontColor(this.accentColor.value)
+              .bindSheet(!this.isWide && this.showQuality, this.qualityPanelContent(), {
+                height: SheetSize.FIT_CONTENT,
+                dragBar: true,
+                showClose: false,
+                preferType: SheetType.BOTTOM,
+                backgroundColor: Color.Transparent,
+                maskColor: $r('app.color.mask_heavy'),
+                onDisappear: (): void => {
+                  if (!this.isWide) {
+                    this.showQuality = false;
+                  }
                 }
+              })
+
+              Row() {
+                SymbolGlyph(this.playModeIcon())
+                  .fontSize(Constants.TOKEN_FONT_18)
+                  .fontColor([this.accentColor.value])
+                  .rotate({ angle: this.playModeRotate() })
               }
               .height(Constants.GLASS_ICON_BTN_SIZE)
               .padding({ left: Constants.TOKEN_SPACE_14, right: Constants.TOKEN_SPACE_14 })
               .onClick(() => {
-                this.showSleepTimer.value = true;
+                this.showMode.value = true;
+              })
+              .bindSheet(!this.isWide && this.showMode.value, this.modePanelContent(), {
+                height: SheetSize.FIT_CONTENT,
+                dragBar: true,
+                showClose: false,
+                preferType: SheetType.BOTTOM,
+                backgroundColor: Color.Transparent,
+                maskColor: $r('app.color.mask_heavy'),
+                onDisappear: (): void => {
+                  if (!this.isWide) {
+                    this.showMode.value = false;
+                  }
+                }
               })
 
               Row() {
@@ -1317,6 +1446,26 @@ export struct PlayerOverlay {
               .onClick(() => {
                 connectBool(Constants.AS_SHOW_QUEUE_SHEET, false).value = true;
               })
+              // 借宿主（v0.8-part4 US3 D4）：单节点单 bindSheet 约束，自定义定时 picker 借队列按钮
+              // Row 承载生命周期（BOTTOM sheet 宿主不决定视觉位置）；shouldDismiss 遮罩/下拉关闭回一级
+              // 定时面板（对齐宽屏 overlay 点遮罩行为），确认路径不经 shouldDismiss 直接双关
+              .bindSheet(!this.isWide && this.showSleepTimerPicker.value, this.sleepTimerPickerContent(), {
+                height: SheetSize.FIT_CONTENT,
+                dragBar: true,
+                showClose: false,
+                preferType: SheetType.BOTTOM,
+                backgroundColor: Color.Transparent,
+                maskColor: $r('app.color.mask_heavy'),
+                shouldDismiss: (sheetDismiss: SheetDismiss) => {
+                  this.showSleepTimer.value = true;
+                  sheetDismiss.dismiss();
+                },
+                onDisappear: (): void => {
+                  if (!this.isWide) {
+                    this.showSleepTimerPicker.value = false;
+                  }
+                }
+              })
             }
             .justifyContent(FlexAlign.Center)
             .alignItems(VerticalAlign.Center)
@@ -1329,23 +1478,24 @@ export struct PlayerOverlay {
       .layoutWeight(1)
       .padding({ bottom: this.navBarHeight.value + (this.isWide ? this.overlayHeightVp * Constants.PLAYER_WIDE_BOTTOM_GAP_RATIO : 0) })
 
-      if (this.showSpeed.value) {
+      // 双轨派生（v0.8-part4 US3）：宽屏条件渲染 overlay，窄屏 bindSheet isShow 取反派生，断点切换即时换形态
+      if (this.isWide && this.showSpeed.value) {
         this.speedPanel()
       }
 
-      if (this.showMode.value) {
+      if (this.isWide && this.showMode.value) {
         this.modePanel()
       }
 
-      if (this.showSleepTimer.value) {
+      if (this.isWide && this.showSleepTimer.value) {
         this.sleepTimerPanel()
       }
 
-      if (this.showSleepTimerPicker.value) {
+      if (this.isWide && this.showSleepTimerPicker.value) {
         this.sleepTimerPicker()
       }
 
-      if (this.showQuality) {
+      if (this.isWide && this.showQuality) {
         this.qualityPanel()
       }
     }
