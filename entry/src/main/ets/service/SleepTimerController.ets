@@ -43,7 +43,7 @@ export class SleepTimerController {
   // 订阅 UI 刷新（KI-2）：返回退订句柄，调用方须在 aboutToDisappear 中调用，
   // 避免播放层反复挂载导致监听器累积；owner 为调用方标识，用于生命周期日志追溯。
   // KI-5：非空 owner 采用单槽覆盖——同 owner 重复订阅时先移除旧监听器再压入新的，
-  // 防止 API 24 伪 aboutToDisappear 时序下漏退订造成的累积（与 PlayerController.subscribe 同型）。
+  // 防止调用方漏退订造成的累积（与 PlayerController.subscribe 同型）。
   subscribe(fn: () => void, owner: string = ''): () => void {
     if (owner !== '') {
       for (let i = this.listeners.length - 1; i >= 0; i--) {

@@ -1,17 +1,17 @@
 import { Constants } from './Constants';
 import { connectBool, BoolState } from './V2State';
 
-// 返回链统一入口（v0.4-Part2 z-layer-refactor）：去路由化后系统返回仅达 Index @Entry，
+// 返回链统一入口（v0.4-p2）：去路由化后系统返回仅达 Index @Entry，
 // dismissOverlaysForBack 按层自上而下逐层关闭（首页编辑模式→队列→历史面板→播放层附属面板→播放层→日志层→设置层句柄→设置层），
 // 层物理堆叠保证链命中的永远是当前最上层；各层滑出句柄与设置层内部句柄均模块级注册（宿主生命周期上报）。
 
 let queueCloseHandle: (() => void) | undefined = undefined;
 let historyCloseHandle: (() => void) | undefined = undefined;
 let settingsBackHandle: (() => boolean) | undefined = undefined;
-// 首页订阅排序编辑模式退出句柄（v0.6-part3）：编辑态由首页 @Local 持有（无全局 flag），
+// 首页订阅排序编辑模式退出句柄（v0.6-p3）：编辑态由首页 @Local 持有（无全局 flag），
 // 句柄内自判编辑态——true=处于编辑态并已消化返回，false=非编辑态放行后续层
 let homeEditBackHandle: (() => boolean) | undefined = undefined;
-// 多选动画退选句柄（FR-008）：队列/历史组件注册组件内动画退出（BackHandler 无 UIContext 不能
+// 多选动画退选句柄（v0.5-p2-1 FR-008）：队列/历史组件注册组件内动画退出（BackHandler 无 UIContext 不能
 // animateTo），未注册回退直翻保证异常时序不崩溃
 let queueSelectExitHandle: (() => void) | undefined = undefined;
 let historySelectExitHandle: (() => void) | undefined = undefined;
@@ -123,7 +123,7 @@ export function dismissOverlaysForBack(): boolean {
   return false;
 }
 
-// 清空队列专用两层同收（R3 US4 / R4 US1）：浮层内实例两标志同帧直复位随浮层一次性退出
+// 清空队列专用两层同收（v0.3-r3 US4 / r4 US1）：浮层内实例两标志同帧直复位随浮层一次性退出
 // （不调用滑出句柄、不起延时器）；首页层实例保持队列经注册句柄滑出（无句柄回退置 flag），
 // 播放浮层无条件立即收起，两层同帧无错峰
 export function closeBothLayersNow(): void {

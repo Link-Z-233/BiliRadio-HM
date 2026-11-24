@@ -39,8 +39,8 @@ export const PLAY_MODES: PlayMode[] = [
   PlayMode.REVERSE
 ];
 
-// 取流失败分类（v0.7-part3 D1）：确定性（失效/大会员）自动跳过并标记，瞬时（风控/网络/其他）停等人工；
-// UPOWER/PAID（v0.7-part4）：充电专属（87007/87008）/付费未购买（87005）门禁码，确定性直报原因
+// 取流失败分类（v0.7-p3 D1）：确定性（失效/大会员）自动跳过并标记，瞬时（风控/网络/其他）停等人工；
+// UPOWER/PAID（v0.7-p4）：充电专属（87007/87008）/付费未购买（87005）门禁码，确定性直报原因
 enum PlayErrorKind {
   INVALID = 0,
   VIP = 1,
@@ -84,17 +84,17 @@ export class PlayerController {
   lastEnqueueSkipped: number = 0;
   lastEnqueueInteractiveSkipped: number = 0;
   pendingSeekMs: number = 0;
-  // 播放意图（v0.3-bugfix-round3 US1）：用户对播放/暂停的最后表态（点击即翻转），是播放控制图标的第一显示来源；
+  // 播放意图（v0.3-r3 US1）：用户对播放/暂停的最后表态（点击即翻转），是播放控制图标的第一显示来源；
   // AVPlayer 事件只做校准复位（出错/打断/停止/播完停止），冷启动恒 false，不落盘
   playIntent: boolean = false;
   private pausedByUser: boolean = false;
   // 打断前是否处于播放意图：audioInterrupt INTERRUPT 时记录，END_INTERRUPT 时据此决定是否续播，仅播放会话内有效
   private resumeAfterInterrupt: boolean = false;
-  // 内部即时播放态（逻辑读，锁屏/控制中心保持实际态）：与 isPlaying 同步直写（v0.3-bugfix-round3 US1 去抖已删除）
+  // 内部即时播放态（逻辑读，锁屏/控制中心保持实际态）：与 isPlaying 同步直写（v0.3-r3 US1 去抖已删除）
   private playingNow: boolean = false;
 
   private player: AudioPlayer = new AudioPlayer();
-  // 在途换档旁路实例唯一归口（v0.8-part3）：非 undefined 即换档在途；所有丢弃点统一经 discardStandby 释放
+  // 在途换档旁路实例唯一归口（v0.8-p3）：非 undefined 即换档在途；所有丢弃点统一经 discardStandby 释放
   private standbyPlayer: AudioPlayer | undefined = undefined;
   private mediaSession: MediaSession = MediaSession.getInstance();
   private inited: boolean = false;
@@ -120,19 +120,19 @@ export class PlayerController {
   private currentCid: number = 0;          // 当前曲目 cid（切档零额外视频信息请求）
   // 最近一次取流请求档位：网络稳定切换目标档与之相同则跳过（避免无谓换流中断）
   private currentRequestedTier: QualityTier = QualityTier.MAX;
-  // 当前网络是否 Wi-Fi（US6）：由 watchStableNetworkType 回调与 init 一次性查询共同维护
+  // 当前网络是否 Wi-Fi（v0-r6 US6）：由 watchStableNetworkType 回调与 init 一次性查询共同维护
   private wifiNow: boolean = false;
 
-  // —— 云端进度同步（v0.5 cloud-history-sync）：零装饰器，挂既有节拍编排 ——
+  // —— 云端进度同步（v0.5-p1-2）：零装饰器，挂既有节拍编排 ——
   // 上次心跳上报的 played_time（秒），兼作防重发水位（seek 回退后水位不复位，与 PiliPlus 一致）
   private heartbeatLastSentSec: number = 0;
   // 心跳连续失败计数：≥HEARTBEAT_FAIL_FUSE 熔断本分P 上报，切分P/重新起播复位
   private heartbeatFailCount: number = 0;
 
-  // —— 播放错误事件（v0.5-part3 US6）：零装饰器，快照字段 + errorTick 版本计数随 emitUi 广播，
+  // —— 播放错误事件（v0.5-p3 US6）：零装饰器，快照字段 + errorTick 版本计数随 emitUi 广播，
   // 消费方（Index）订阅回调内比对 tick 变化触发系统 toast ——
   // stage：'prepare'（取流/准备失败）| 'play'（播放器运行时错误）；
-  // errorMsg：分型文案（v0.7-part3），Index toast 消费；time-window 去重见 playbackError
+  // errorMsg：分型文案（v0.7-p3），Index toast 消费；time-window 去重见 playbackError
   errorStage: string = '';
   errorBvid: string = '';
   errorCode: number = 0;
@@ -140,22 +140,22 @@ export class PlayerController {
   errorTick: number = 0;
   private errorLastAt: Map<string, number> = new Map<string, number>();
 
-  // —— 队列移除联动取消收藏（v0.6-part1 US1）：零装饰器，结果 toast 快照 + tick 版本计数随 emitUi 广播，
+  // —— 队列移除联动取消收藏（v0.6-p1 US1）：零装饰器，结果 toast 快照 + tick 版本计数随 emitUi 广播，
   // 消费方（Index）订阅回调内比对 tick 变化触发系统 toast ——
   unfavToastMsg: string = '';
   unfavToastTick: number = 0;
 
-  // —— 数据源异常标记（v0.5-part5 play-anomaly）：零装饰器，anomalySet 快照随 emitUi 广播，
+  // —— 数据源异常标记（v0.5-p5）：零装饰器，anomalySet 快照随 emitUi 广播，
   // 消费方 syncFrom 拷贝或 hasAnomaly 直查；仅本地 preferences，不云同步 ——
   anomalySet: Set<string> = new Set<string>();
   private anomalyToastLastAt: number = 0;
   private anomalyGuardLogged: boolean = false;
 
-  // —— 失效标记（v0.7-part3 invalid-video）：零装饰器，invalidSet 快照随 emitUi 广播，
+  // —— 失效标记（v0.7-p3）：零装饰器，invalidSet 快照随 emitUi 广播，
   // 消费方 hasInvalid 直查；仅本地 preferences，不云同步；失效判定优先——标 X 同时摘异常标记（D2） ——
   invalidSet: Set<string> = new Set<string>();
 
-  // —— 异常 toast 广播（v0.6-part2 US1）：零装饰器，toast 快照 + tick 版本计数随 emitUi 广播，
+  // —— 异常 toast 广播（v0.6-p2 US1）：零装饰器，toast 快照 + tick 版本计数随 emitUi 广播，
   // 消费方（Index）订阅回调内比对 tick 变化触发系统 toast ——
   anomalyToastMsg: string = '';
   anomalyToastTick: number = 0;
@@ -224,11 +224,10 @@ export class PlayerController {
     return Constants.TOAST_SKIP_INTERACTIVE.replace('N', `${interactiveSkipped}`);
   }
 
-  // 订阅 UI 刷新（US2/KI-1）：返回退订句柄，调用方须在 aboutToDisappear 中调用，
+  // 订阅 UI 刷新（v0-r4 US2/KI-1）：返回退订句柄，调用方须在 aboutToDisappear 中调用，
   // 避免页面销毁后监听器累积导致进度广播截断；owner 为调用方标识，用于生命周期日志追溯。
-  // KI-5：非空 owner 采用单槽覆盖——同 owner 重复订阅时先移除旧监听器再压入新的。
-  // 前提是 API 24 上 bindContentCover 内容组件可能收到伪 aboutToDisappear 导致漏退订，
-  // 单槽覆盖保证即便如此，重复挂载也不会累积监听器。
+  // KI-5：非空 owner 采用单槽覆盖——同 owner 重复订阅时先移除旧监听器再压入新的，
+  // 保证调用方即便漏退订，重复挂载也不会累积监听器。
   subscribe(fn: () => void, owner: string = ''): () => void {
     if (owner !== '') {
       for (let i = this.uiListeners.length - 1; i >= 0; i--) {
@@ -261,7 +260,7 @@ export class PlayerController {
       try {
         this.uiListeners[i]();
       } catch (e) {
-        // US2/KI-1：单监听器异常不得中断广播循环，其余监听器照常刷新
+        // v0-r4 US2/KI-1：单监听器异常不得中断广播循环，其余监听器照常刷新
         const error = e as BusinessError;
         hilog.warn(Constants.LOG_DOMAIN, Constants.LOG_TAG,
           'emitUi listener error: %{public}s', error.message);
@@ -280,7 +279,7 @@ export class PlayerController {
       ? this.playlist[this.currentIndex].bvid : '';
   }
 
-  // 播放错误统一入口（US6）：hilog+应用日志恒记（可追溯）；stage+bvid 时间窗去重仅门控广播，
+  // 播放错误统一入口（v0.5-p3 US6）：hilog+应用日志恒记（可追溯）；stage+bvid 时间窗去重仅门控广播，
   // 防「重试连环失败/播放器反复 error」刷屏；去重通过才更新错误快照并递增 errorTick，
   // 消费方比对 tick 弹一次性 toast；Map 无淘汰，键空间=实际播放过的 bvid×2 阶段，量级可忽略
   playbackError(stage: string, code: number, bvid: string,
@@ -380,7 +379,7 @@ export class PlayerController {
     this.emitUi();
   }
 
-  // 异常 toast 去重窗（FR-008）：沿用 PLAYBACK_ERROR_DEDUP_MS 窗口，窗内只弹一次；日志恒记
+  // 异常 toast 去重窗（v0.5-p5 FR-008）：沿用 PLAYBACK_ERROR_DEDUP_MS 窗口，窗内只弹一次；日志恒记
   private showAnomalyToast(message: string): void {
     const now: number = Date.now();
     if (now - this.anomalyToastLastAt < Constants.PLAYBACK_ERROR_DEDUP_MS) {
@@ -392,7 +391,7 @@ export class PlayerController {
     this.emitUi();
   }
 
-  // 取流失败七档分类（v0.7-part3 D1 + part4 门禁码）：消息提取不改 BiliService 抛错结构；确定性档 msg 为空
+  // 取流失败七档分类（v0.7-p3 D1 + v0.7-p4 门禁码）：消息提取不改 BiliService 抛错结构；确定性档 msg 为空
   // （调用方按 kind 取 Constants 分型文案），瞬时三档 msg 即分型文案；OTHER 透传好友文案
   // （-101 登录失效等），raw 模板归 '' 由调用方兜底
   private static classifyPlayError(message: string): PlayErrorInfo {
@@ -428,9 +427,9 @@ export class PlayerController {
     return info;
   }
 
-  // 数据源异常判定（D1/D2）：prepared 是流时长唯一可信取值点；元数据/流时长任一无效跳过判定（FR-009）；
+  // 数据源异常判定（v0.5-p5 D1/D2）：prepared 是流时长唯一可信取值点；元数据/流时长任一无效跳过判定（FR-009）；
   // 仅判「显著短于」（反向常源于元数据不可靠，不判）；异常标感叹号（幂等，复用 prepared 分支不重复写盘），
-  // 流恢复完整自动摘（D6）；拉流失败不进本判定点（catch 分类接管）。
+  // 流恢复完整自动摘（v0.5-p5 D6）；拉流失败不进本判定点（catch 分类接管）。
   // 返回 true = 跳过分流已接管本次 prepared，调用方不得再起播
   private handleAnomalyOnPrepared(): boolean {
     if (this.currentIndex < 0 || this.currentIndex >= this.playlist.length) {
@@ -541,7 +540,7 @@ export class PlayerController {
           autoStartPos = restorePos;
         }
       }
-      // 指定名单恢复（v0.8-part4 US1 FR-002）：items 恢复后按「队列中存在该 key」过滤
+      // 指定名单恢复（v0.8-p4 US1 FR-002）：items 恢复后按「队列中存在该 key」过滤
       // （顺序保留，失效 key 静默丢弃），跨重启继续兑现「下一首播放」
       const restoredDesignated: string[] = [];
       for (let i = 0; i < snapshot.designatedKeys.length; i++) {
@@ -559,13 +558,13 @@ export class PlayerController {
         (): void => { this.next(); },
         (): void => { this.prev(); },
         (time: number): void => { this.seek(time); },
-        // US8：媒体控制中心快进/快退按钮走既有 seekBy 防抖路径
+        // v0-r3 US8：媒体控制中心快进/快退按钮走既有 seekBy 防抖路径
         (): void => { this.seekBy(Constants.SEEK_STEP_MS); },
         (): void => { this.seekBy(-Constants.SEEK_STEP_MS); },
       ).catch((): void => {});
 
       if (autoStartIndex >= 0 && AppStore.getNumber(Constants.KEY_AUTO_PLAY_ON_START, 0) === 1) {
-        // 恢复目标已标记（失效/异常，plan D6）不自动续播：显示态照常（条目/进度/标记可见），等用户操作
+        // 恢复目标已标记（失效/异常，v0.7-p3 plan D6）不自动续播：显示态照常（条目/进度/标记可见），等用户操作
         const restoreItem: BiliVideo = this.playlist[autoStartIndex];
         if (!this.hasInvalid(restoreItem.bvid) && !this.hasAnomaly(restoreItem.bvid)) {
           this.statusMsg = '自动继续播放上次进度';
@@ -575,14 +574,14 @@ export class PlayerController {
 
       // 网络稳定切换监听（audio-quality-settings FR-010）：进程生命周期内单例注册，
       // 网络在 Wi-Fi/流量间稳定切换后按新网络默认档自动换流（失败由 setQualityTier 释放旁路实例保旧流不打断）；
-      // US6：回调同时维护 wifiNow 快照（isWifiNow 查询用），初值由一次性查询补齐
+      // v0-r6 US6：回调同时维护 wifiNow 快照（isWifiNow 查询用），初值由一次性查询补齐
       NetUtil.isWifi().then((wifi: boolean): void => {
         this.wifiNow = wifi;
       }).catch((): void => {});
       NetUtil.watchStableNetworkType((isWifi: boolean): void => {
         this.wifiNow = isWifi;
         Logger.log('player', 'stable network change', `isWifi=${isWifi ? 1 : 0}`);
-        // US6：网络态翻转广播 UI（播放页大封面按新档取图）
+        // v0-r6 US6：网络态翻转广播 UI（播放页大封面按新档取图）
         this.emitUi();
         this.applyDefaultTierForNetwork().catch((): void => {});
       });
@@ -593,7 +592,7 @@ export class PlayerController {
     this.emitUi();
   }
 
-  // 主实例回调挂载（v0.8-part3 自 init 抽取）：init 与换档交接两处复用，挂载内容不变
+  // 主实例回调挂载（v0.8-p3 自 init 抽取）：init 与换档交接两处复用，挂载内容不变
   private attachPlayerCallbacks(target: AudioPlayer): void {
     target.onStateChange = (state: string): void => {
       this.onPlayerState(state);
@@ -651,7 +650,7 @@ export class PlayerController {
     this.isPlaying = playing;
   }
 
-  // 取流失败停口（v0.7-part3，镜像 onError 运行时错误处置）：意图复位（FR-008）+ 停声（FR-015）
+  // 取流失败停口（v0.7-p3，镜像 onError 运行时错误处置）：意图复位（FR-008）+ 停声（FR-015）
   // + 媒体会话停播；跳过路径不停声（后续 playIndex 成功衔接时自然重建释放旧流）
   private stopFailedPlayback(statusText: string): void {
     this.playIntent = false;
@@ -670,7 +669,7 @@ export class PlayerController {
       this.isPrepared = true;
       this.isPreparing = false;
       this.duration = this.player.duration;
-      // US9：此前推送系统会话的时长为 0（条目未知时长）时，以真实时长 force 重推同曲目元数据，
+      // v0-r6 US9：此前推送系统会话的时长为 0（条目未知时长）时，以真实时长 force 重推同曲目元数据，
       // 绕过 lastAssetId 去重，修复锁屏/控制中心进度条为空
       if (this.duration > 0 && this.currentIndex >= 0 && this.currentIndex < this.playlist.length) {
         const item: BiliVideo = this.playlist[this.currentIndex];
@@ -679,7 +678,7 @@ export class PlayerController {
             item.cover, item.ownerName, true);
         }
       }
-      // 数据源异常判定（v0.5-part5 T004/T005）：流时长 vs 元数据时长，异常恒跳过（v0.7-part3 开关废止）
+      // 数据源异常判定（v0.5-p5 T004/T005）：流时长 vs 元数据时长，异常恒跳过（v0.7-p3 开关废止）
       if (this.handleAnomalyOnPrepared()) {
         this.emitUi();
         return;
@@ -715,7 +714,7 @@ export class PlayerController {
       this.setPlaying(true);
     } else if (state === 'paused') {
       this.persistProgress();
-      // 暂停即时补报（US1）：前进 ≥HEARTBEAT_MIN_GAP_SEC 才发，补报一次后停报
+      // 暂停即时补报（v0.5-p1-2 US1）：前进 ≥HEARTBEAT_MIN_GAP_SEC 才发，补报一次后停报
       this.reportHeartbeatIfAdvanced(Constants.HEARTBEAT_MIN_GAP_SEC);
       this.mediaSession.updateState(false, this.currentTime);
       this.setPlaying(false);
@@ -735,7 +734,7 @@ export class PlayerController {
       }
       this.setPlaying(false);
       this.mediaSession.updateState(false, this.currentTime);
-      // 完播标记（plan R5①）：自然播完 → 当前条目 progress=-1 即时写盘
+      // 完播标记（play-history-progress plan R5①）：自然播完 → 当前条目 progress=-1 即时写盘
       this.markCurrentHistoryCompleted();
       this.handleCompleted();
     } else if (state === 'idle' || state === 'stopped') {
@@ -773,7 +772,7 @@ export class PlayerController {
       this.player.play();
       return;
     }
-    // US7：顺序模式播到最后一集 / 倒序模式回到第一集时停止，不回绕到另一端（手动切歌仍经 next() 回绕）
+    // v0-r3 US7：顺序模式播到最后一集 / 倒序模式回到第一集时停止，不回绕到另一端（手动切歌仍经 next() 回绕）
     const lastIndex: number = this.playlist.length - 1;
     if (lastIndex >= 0 &&
       ((this.playMode === PlayMode.SEQUENTIAL && this.currentIndex >= lastIndex) ||
@@ -783,7 +782,7 @@ export class PlayerController {
       this.playIntent = false;
       return;
     }
-    // v0.8-part1 FR-004：随机模式全完播停止（US7 同款路径）——指定下一首为空且歌单内全部条目
+    // v0.8-p1 FR-004：随机模式全完播停止（v0-r3 US7 同款路径）——指定下一首为空且歌单内全部条目
     // 完播时不再自动连播；手动 next 维持回退（randomIndex 回退重播当前），不自动开启新一轮重抽
     if (this.playMode === PlayMode.RANDOM && this.designatedNextQueue.length === 0 &&
       this.isAllEntriesCompleted()) {
@@ -806,11 +805,11 @@ export class PlayerController {
     if (now - this.lastSaveTime > Constants.PROGRESS_SAVE_INTERVAL_MS) {
       this.lastSaveTime = now;
       this.persistProgress();
-      // 云端心跳挂同一 5s 节拍（US1）：前进阈值复用节拍间隔换算，不新增独立计时器
+      // 云端心跳挂同一 5s 节拍（v0.5-p1-2 US1）：前进阈值复用节拍间隔换算，不新增独立计时器
       this.reportHeartbeatIfAdvanced(Math.floor(Constants.PROGRESS_SAVE_INTERVAL_MS / 1000));
       this.mediaSession.updateState(this.playingNow, time);
     }
-    // 完播阈值判定（plan R5②）：duration 已知且进度 ≥ duration×95% → 同样标记已听完
+    // 完播阈值判定（play-history-progress plan R5②）：duration 已知且进度 ≥ duration×95% → 同样标记已听完
     // （覆盖「拖到结尾附近停住/切走」场景）；duration 未知（=0）保守不判定
     if (this.playingNow && this.duration > 0 && time >= this.duration * Constants.PLAY_COMPLETE_RATIO) {
       this.markCurrentHistoryCompleted();
@@ -826,27 +825,27 @@ export class PlayerController {
 
   private persistProgress(): void {
     if (this.currentIndex >= 0 && this.currentIndex < this.playlist.length) {
-      // 全局断点（KEY_LAST_INDEX/KEY_LAST_POS_MS/KEY_LAST_QUALITY）写入路径零改动（不变式④，与每集进度互不干扰）
+      // 全局断点（KEY_LAST_INDEX/KEY_LAST_POS_MS/KEY_LAST_QUALITY）写入路径零改动（play-history-progress 不变式④，与每集进度互不干扰）
       AppStore.putNumber(Constants.KEY_LAST_INDEX, this.currentIndex);
       AppStore.putNumber(Constants.KEY_LAST_POS_MS, this.currentTime);
       AppStore.putNumber(Constants.KEY_LAST_QUALITY, this.currentQualityCode);
-      // 每集进度（plan R6）：当前条目 progress=floor(currentTime/1000)（恒 ≥0，-1 仅由完播判定写入），
+      // 每集进度（play-history-progress plan R6）：当前条目 progress=floor(currentTime/1000)（恒 ≥0，-1 仅由完播判定写入），
       // 随本 5s 节拍/暂停/切歌即时点异步写历史文件，异常退出进度回退 ≤ 一个节拍
       this.updateHistoryProgressForCurrent(Math.floor(this.currentTime / 1000));
     }
   }
 
   // 云端同步总开关（上行/下行共用）：已登录且 KEY_HISTORY_SYNC 开（默认开）；
-  // 未登录/关闭时零上报请求、零云端续播合并（FR-006/SC-004）
+  // 未登录/关闭时零上报请求、零云端续播合并（v0.5-p1-2 FR-006/SC-004）
   private isHistorySyncEnabled(): boolean {
     return BiliSession.getInstance().isLogged() &&
       AppStore.getNumber(Constants.KEY_HISTORY_SYNC, 1) === 1;
   }
 
-  // 心跳上报（best-effort，US1）：minGapSec=较上次上报的最小前进量
+  // 心跳上报（best-effort，v0.5-p1-2 US1）：minGapSec=较上次上报的最小前进量
   // （播放节拍取 PROGRESS_SAVE_INTERVAL_MS 换算 5s，暂停/切分P 补报取 HEARTBEAT_MIN_GAP_SEC）；
   // 取调用时刻的 bvid/cid/currentTime（快速切分P 不串台）；熔断后本分P 静默；
-  // 失败计数连续达阈值熔断，成功清零；全程静默无弹窗无重试循环（FR-007）
+  // 失败计数连续达阈值熔断，成功清零；全程静默无弹窗无重试循环（v0.5-p1-2 FR-007）
   private reportHeartbeatIfAdvanced(minGapSec: number): void {
     if (this.heartbeatFailCount >= Constants.HEARTBEAT_FAIL_FUSE) {
       return;
@@ -879,7 +878,7 @@ export class PlayerController {
     });
   }
 
-  // 完播上报（US3）：played_time=-1（B 站「-1=看完」语义），挂 markCurrentHistoryCompleted
+  // 完播上报（v0.5-p1-2 US3）：played_time=-1（B 站「-1=看完」语义），挂 markCurrentHistoryCompleted
   // 唯一判定点（自然完播/95% 阈值共用，幂等去重由 progress===-1 早退保证，每分P 至多一次）；
   // 经 isHistorySyncEnabled + 熔断计数同一 gate，不占用水位（-1 是完播语义非进度），失败计数熔断
   private reportHeartbeatCompleted(): void {
@@ -908,7 +907,7 @@ export class PlayerController {
     });
   }
 
-  // 元数据回填（US2）：cid/UP 主/播放量/发布时间/简介写回队列条目并刷新 UI
+  // 元数据回填（v0-r2 US2）：cid/UP 主/播放量/发布时间/简介写回队列条目并刷新 UI
   private applyTrackMeta(item: BiliVideo, video: BiliVideo): void {
     if (video.cid > 0) {
       item.cid = video.cid;
@@ -930,7 +929,7 @@ export class PlayerController {
     this.emitUi();
   }
 
-  // 流式开播带重试（US2）：同一 URL 重试一次仍失败则轮换下一备选直链；全部失败抛最后错误，
+  // 流式开播带重试（v0-r2 US2）：同一 URL 重试一次仍失败则轮换下一备选直链；全部失败抛最后错误，
   // 由调用方统一提示，播放队列与列表状态不受影响；目标实例由入参指定（主实例与换档旁路实例共用）
   private async openStreamWithRetry(player: AudioPlayer, urls: string[]): Promise<void> {
     let lastError: Error = new Error('No stream URL');
@@ -952,7 +951,7 @@ export class PlayerController {
     throw lastError;
   }
 
-  // 按当前网络类型读默认档（FR-002）：Wi-Fi→KEY_WIFI_AUDIO_QUALITY，否则→KEY_CELLULAR_AUDIO_QUALITY；
+  // 按当前网络类型读默认档（audio-quality-settings FR-002）：Wi-Fi→KEY_WIFI_AUDIO_QUALITY，否则→KEY_CELLULAR_AUDIO_QUALITY；
   // 存储值经 fromStored 归一（未初始化 -1 → MAX），供 playIndex 与自动换档复用
   private async readDefaultTierForNetwork(): Promise<QualityTier> {
     const isWifi: boolean = await NetUtil.isWifi();
@@ -963,8 +962,8 @@ export class PlayerController {
   async loadPlaylistAndPlay(items: BiliVideo[], startIndex: number,
     insertAfterCurrent: boolean = false, allowInteractive: boolean = false): Promise<EnqueueResult> {
     // 追加去重：按复合键（bvid+page，占位 0≡1）过滤掉已在歌单中的项，避免重复；
-    // 互动视频默认过滤（US3：音频流对剧情树无意义），全互动直接拦截不入队不播放；
-    // allowInteractive 豁免（收藏夹源不拦，修订⑩）：互动稿照常入队走默认路线
+    // 互动视频默认过滤（v0.7-p4 US3：音频流对剧情树无意义），全互动直接拦截不入队不播放；
+    // allowInteractive 豁免（收藏夹源不拦，v0.7-p5 修订⑩）：互动稿照常入队走默认路线
     const toAdd: BiliVideo[] = [];
     let skipped: number = 0;
     let interactiveSkipped: number = 0;
@@ -1032,7 +1031,7 @@ export class PlayerController {
     }
     this.playlist = this.playlist.slice(0, insertAt).concat(toAdd, this.playlist.slice(insertAt));
     this.playlistVersion++;
-    // 指定下一首登记（v0.8-part1 FR-005）：实际插到当前条目游程之后（afterCurrent，
+    // 指定下一首登记（v0.8-p1 FR-005）：实际插到当前条目游程之后（afterCurrent，
     // 含游程在队尾、insertAt 恰等于原长度的场景）时 toAdd 复合键整批前插 FIFO 队首——
     // 与线性插入位置一致（最新紧跟当前条目），旧指定项未消费时最新「下一首播放」
     // 仍兑现为下一首；命中去重项不在 toAdd、非 insertAfterCurrent 的纯追加队尾路径不登记
@@ -1060,7 +1059,7 @@ export class PlayerController {
     return toAdd.length > 0 ? EnqueueResult.APPENDED : EnqueueResult.DUPLICATE;
   }
 
-  // 续播起点查询（plan R4 契约，复合键分P 粒度）：条目存在且 progress>0 且 ≠-1 且（duration>0 时
+  // 续播起点查询（play-history-progress plan R4 契约，复合键分P 粒度）：条目存在且 progress>0 且 ≠-1 且（duration>0 时
   // progress < duration×PLAY_COMPLETE_RATIO）→ progress×1000；否则 0。纯查询，无副作用
   getResumeMsFor(bvid: string, page: number): number {
     const key: string = BiliVideo.itemKeyOf(bvid, page);
@@ -1077,7 +1076,7 @@ export class PlayerController {
     return 0;
   }
 
-  // 条目游程单一来源（v0.4-queue-multi-p-item plan D8，展示层条目构建与播控随机抽取共用）：
+  // 条目游程单一来源（queue-multi-p-item plan D8，展示层条目构建与播控随机抽取共用）：
   // 扁平播放列表的连续下标游程，同 bvid 且页号≥1 的相邻条目合并为一游程（≥2 为组、=1 为单条目）；
   // 覆盖全部下标、有序连续；纯只读派生，不广播无副作用
   getQueueEntryGroups(): number[][] {
@@ -1097,7 +1096,7 @@ export class PlayerController {
     return groups;
   }
 
-  // 复合键完播查询（v0.5 cloud-history-sync US2）：该 (bvid,page) 历史条目 progress===-1；
+  // 复合键完播查询（v0.5-p1-2 US2）：该 (bvid,page) 历史条目 progress===-1；
   // 与 bvid 粒度 isPlayed 区分——云端合并防护只需当前分P 自身完播，不被同视频其他分P 的完播吞并
   private isHistoryCompletedFor(bvid: string, page: number): boolean {
     const key: string = BiliVideo.itemKeyOf(bvid, page);
@@ -1131,11 +1130,11 @@ export class PlayerController {
         return;
       }
     }
-    // 每集进度（plan R4）：旧曲目仍在真实出声时先即时 flush 其进度（切歌写盘点）——
+    // 每集进度（play-history-progress plan R4）：旧曲目仍在真实出声时先即时 flush 其进度（切歌写盘点）——
     // 此刻 currentIndex/currentTime/duration/currentCid 均属旧曲目，先落史再切换
     if (this.playingNow && !this.isPreparing) {
       this.updateHistoryProgressForCurrent(Math.floor(this.currentTime / 1000));
-      // 切分P 即时补报（US1）：旧条目最终位置上报云端（此刻 cid/进度仍属旧条目）
+      // 切分P 即时补报（v0.5-p1-1 US1）：旧条目最终位置上报云端（此刻 cid/进度仍属旧条目）
       this.reportHeartbeatIfAdvanced(Constants.HEARTBEAT_MIN_GAP_SEC);
     }
     if (!fromNav) {
@@ -1147,7 +1146,7 @@ export class PlayerController {
     }
     this.currentIndex = index;
     let item: BiliVideo = this.playlist[index];
-    // US2：切剧入口初始化——重置秒级节流计数并取消挂起的 seekBy 防抖，
+    // v0-r4 US2：切剧入口初始化——重置秒级节流计数并取消挂起的 seekBy 防抖，
     // 杜绝上一集残留的广播状态导致新剧集进度条冻结
     this.lastEmittedSec = -1;
     if (this.seekByTimerId >= 0) {
@@ -1160,12 +1159,12 @@ export class PlayerController {
     this.currentQualityCode = 0;
     this.currentTrackSource = '';
     this.currentCid = 0;
-    // 云端心跳复位（US1）：切分P/重新起播重置上报水位与熔断计数，新分P 重新计
+    // 云端心跳复位（v0.5-p1-1 US1）：切分P/重新起播重置上报水位与熔断计数，新分P 重新计
     this.heartbeatLastSentSec = 0;
     this.heartbeatFailCount = 0;
     // 完播防护日志去重复位：新条目起播后防护触发重新登记一次
     this.anomalyGuardLogged = false;
-    // 续播决策（plan R4）：仅新起播（seekMs<=0，如点历史条目/点单集入队/切歌）时以历史进度决定起点；
+    // 续播决策（play-history-progress plan R4）：仅新起播（seekMs<=0，如点历史条目/点单集入队/切歌）时以历史进度决定起点；
       // seekMs>0 的保进度起播与全局断点恢复路径零变化
     let effectiveSeekMs: number = seekMs;
     if (seekMs <= 0) {
@@ -1189,7 +1188,7 @@ export class PlayerController {
     this.loadToken++;
     const token: number = this.loadToken;
     try {
-      // 形态分叉（plan D3）：形态 A（page≥1 && cid>0，入队展开已回填）跳过 view 拉取直接取流——
+      // 形态分叉（fix-multi-part plan D3）：形态 A（page≥1 && cid>0，入队展开已回填）跳过 view 拉取直接取流——
       // 修「永远只播 P1」根因；形态 B（占位）拉 view：多P 就地展开（D8）后播 P1，单P 直通回填
       this.statusMsg = '正在缓冲...';
       this.emitUi();
@@ -1221,8 +1220,8 @@ export class PlayerController {
       if (token !== this.loadToken) {
         return;
       }
-      // 云端续播合并（v0.5 cloud-history-sync US2）：仅新起播（seekMs<=0）路径，取流响应零新增请求携带云端进度；
-      // 严格 cid 匹配（FR-003）：仅云端 last_play_cid 与起播分P cid 一致且进度 >0 时参与，否则纯本地；
+      // 云端续播合并（v0.5-p1-2 US2）：仅新起播（seekMs<=0）路径，取流响应零新增请求携带云端进度；
+      // 严格 cid 匹配（v0.5-p1-1 FR-003）：仅云端 last_play_cid 与起播分P cid 一致且进度 >0 时参与，否则纯本地；
       // 本地该分P 已听完（-1）→ 从头忽略云端；云端 ≥ duration×完播阈值 → 视为云端已看完从头；
       // 否则起点=max(本地续播, 云端) 不回退；未登录/开关关（isHistorySyncEnabled）→ 纯本地（现状行为）；
       // 此刻尚未 openStream，改写 pendingSeekMs/currentTime 即改起播点
@@ -1269,7 +1268,7 @@ export class PlayerController {
       }
       const error = err as BusinessError;
       this.isPreparing = false;
-      // 失败条目即时持久化为当前条目（FR-014）：进度归 0，跳过成功后由成功路径覆盖写
+      // 失败条目即时持久化为当前条目（v0.7-p3 FR-014）：进度归 0，跳过成功后由成功路径覆盖写
       AppStore.savePlaylistFile(this.playlist, this.currentIndex, 0, this.currentQualityCode, this.designatedNextQueue);
       const info: PlayErrorInfo = PlayerController.classifyPlayError(error.message);
       // BiliService 抛 plain Error 时 code 为 undefined，typeof 归一为 0（取流失败通常无错误码语义）
@@ -1310,7 +1309,7 @@ export class PlayerController {
     }
   }
 
-  // 随机条目级抽取（v0.4-queue-multi-p-item plan D8 + v0.8-part1 分层排除）：优先级 = 组内连播
+  // 随机条目级抽取（queue-multi-p-item plan D8 + v0.8-p1 分层排除）：优先级 = 组内连播
   // （当前为分P 且扁平下一条同 bvid 分P → currentIndex+1）> 指定下一首（FIFO 弹出校验跳播）
   // > 排除式条目级随机（候选 = 条目组 − 会话已播 bvid − 完播 bvid − 当前组，等概率，
   // 抽中取其最小页下标起播）> 回退当前条目（重播/续播语义随 playIndex）；
@@ -1323,7 +1322,7 @@ export class PlayerController {
         return this.currentIndex + 1;
       }
     }
-    // 指定下一首消费（v0.8-part1 FR-006）：组内连播之后、随机抽取之前，弹出队首复合键，
+    // 指定下一首消费（v0.8-p1 FR-006）：组内连播之后、随机抽取之前，弹出队首复合键，
     // 在歌单则跳播该下标（多P 插入条目由组内连播自然接力后续分P），不在（已移除）则丢弃续弹
     while (this.designatedNextQueue.length > 0) {
       const key: string = this.designatedNextQueue.shift() ?? '';
@@ -1353,7 +1352,7 @@ export class PlayerController {
     return target;
   }
 
-  // 随机候选构建（v0.8-part1 FR-001）：条目组 − 会话已播 bvid − 完播 bvid − 当前组；纯过滤
+  // 随机候选构建（v0.8-p1 FR-001）：条目组 − 会话已播 bvid − 完播 bvid − 当前组；纯过滤
   private filterRandomCandidates(groups: number[][]): number[][] {
     const candidates: number[][] = [];
     for (let g = 0; g < groups.length; g++) {
@@ -1369,7 +1368,7 @@ export class PlayerController {
     return candidates;
   }
 
-  // 未完播候选存在性（v0.8-part1 FR-003）：非当前组中存在未完播条目 → 候选耗尽后清会话已播标记重抽
+  // 未完播候选存在性（v0.8-p1 FR-003）：非当前组中存在未完播条目 → 候选耗尽后清会话已播标记重抽
   private hasUncompletedEntry(groups: number[][]): boolean {
     for (let g = 0; g < groups.length; g++) {
       if (groups[g].indexOf(this.currentIndex) >= 0) {
@@ -1384,12 +1383,12 @@ export class PlayerController {
 
   private shuffleHistory: string[] = [];
   private forwardHistory: string[] = [];
-  // —— 随机分层排除（v0.8-part1）：会话已播集（bvid 条目级，'playing' 出声写入，不持久化）与
-  // 指定下一首队列（复合键 FIFO，源页 insertAfterCurrent 插入登记；随 playlist.json 持久化，v0.8-part4）——
+  // —— 随机分层排除（v0.8-p1）：会话已播集（bvid 条目级，'playing' 出声写入，不持久化）与
+  // 指定下一首队列（复合键 FIFO，源页 insertAfterCurrent 插入登记；随 playlist.json 持久化，v0.8-p4）——
   private sessionPlayedSet: Set<string> = new Set<string>();
   private designatedNextQueue: string[] = [];
 
-  // 复合键检索（D6：键经 BiliVideo.itemKeyOf 合成，占位 page 0≡1 归一化比较；禁各处手拼）
+  // 复合键检索（fix-multi-part D6：键经 BiliVideo.itemKeyOf 合成，占位 page 0≡1 归一化比较；禁各处手拼）
   private indexOfKey(key: string): number {
     for (let i = 0; i < this.playlist.length; i++) {
       if (BiliVideo.itemKeyOf(this.playlist[i].bvid, this.playlist[i].page) === key) {
@@ -1587,7 +1586,7 @@ export class PlayerController {
     this.emitUi();
   }
 
-  // —— ±15s 进度微调（spec FR-013 / plan R3）——
+  // —— ±15s 进度微调（player-redesign FR-013 / plan R3）——
   // 防抖句柄与待提交目标：连按时合并为最终一次 player.seek，避免 AVPlayer seek 风暴
   private seekByTimerId: number = -1;
   private seekByTargetMs: number = 0;
@@ -1625,7 +1624,7 @@ export class PlayerController {
     }, Constants.SEEK_BY_DEBOUNCE_MS);
   }
 
-  // 旁路实例丢弃唯一归口（D5）：字段仍指向该实例才清空，随后释放；重复释放幂等
+  // 旁路实例丢弃唯一归口（v0.8-p3 D5）：字段仍指向该实例才清空，随后释放；重复释放幂等
   private discardStandby(standby: AudioPlayer): void {
     if (this.standbyPlayer === standby) {
       this.standbyPlayer = undefined;
@@ -1633,7 +1632,7 @@ export class PlayerController {
     standby.release().catch((): void => {});
   }
 
-  // 旁路实例出声确认（D2/D6）：轮询 isPlaying，上限 TOKEN_SWITCH_PLAY_TIMEOUT_MS；token 失配提前放弃
+  // 旁路实例出声确认（v0.8-p3 D2/D6）：轮询 isPlaying，上限 TOKEN_SWITCH_PLAY_TIMEOUT_MS；token 失配提前放弃
   private async waitStandbyPlaying(standby: AudioPlayer, token: number): Promise<boolean> {
     const start: number = Date.now();
     while (!standby.isPlaying) {
@@ -1646,10 +1645,10 @@ export class PlayerController {
     return true;
   }
 
-  // 手动/自动换档（audio-quality-settings FR-004/FR-010；v0.8-part3 改双播放器旁路交接）：
+  // 手动/自动换档（audio-quality-settings FR-004/FR-010；v0.8-p3 改双播放器旁路交接）：
   // 旧实例全程出声不动，新档流经 standbyPlayer 旁路实例静默预载（回调未挂即天然静默），
   // prepared 后 seek 到主实例实时进度起播，确认真实出声再停旧换新（零静音缝隙，允许毫秒级重叠）；
-  // 预载/起播/确认任一失败或超时整体释放旁路实例，旧流无感知继续（FR-003）；
+  // 预载/起播/确认任一失败或超时整体释放旁路实例，旧流无感知继续（v0.8-p3 FR-003）；
   // 暂停态切档走无声变体（预载后不起播，替换保持暂停）。并发沿用 loadToken「最后触发者为准」；
   // writeBack=true（面板手动）按当前网络写回对应默认档键，false（网络自动）不写
   async setQualityTier(tier: QualityTier, writeBack: boolean): Promise<void> {
@@ -1760,14 +1759,14 @@ export class PlayerController {
       }
       const error = err as BusinessError;
       Logger.log('player', 'setQualityTier failed', error.message);
-      // 失败纯放弃：释放旁路实例，旧流与播放状态字段全程未动（FR-003，无恢复链）
+      // 失败纯放弃：释放旁路实例，旧流与播放状态字段全程未动（v0.8-p3 FR-003，无恢复链）
       this.discardStandby(standby);
       this.statusMsg = '音质切换失败';
       this.emitUi();
     }
   }
 
-  // 网络稳定切换自动换档（FR-010）：仅在线 dash 流且非切剧中触发；换档在途（standbyPlayer 非空）跳过，
+  // 网络稳定切换自动换档（audio-quality-settings FR-010）：仅在线 dash 流且非切剧中触发；换档在途（standbyPlayer 非空）跳过，
   // 目标档与最近取流档相同则跳过（避免无谓换流中断），失败由 setQualityTier 释放旁路实例保旧流
   private async applyDefaultTierForNetwork(): Promise<void> {
     if (this.currentTrackSource !== 'dash' || this.isPreparing ||
@@ -1835,7 +1834,7 @@ export class PlayerController {
 
   // 单视频入队统一入口（queue-redesign US6）：取分P 详情后委托 loadPlaylistAndPlay——
   // 队列空则起播（STARTED），非空则追加不打断（APPENDED），重复返回 DUPLICATE；
-  // page=0 全部分P 展开（US1），page≥1 只入队该分P，越界兜底 P1（US2）
+  // page=0 全部分P 展开（fix-multi-part US1），page≥1 只入队该分P，越界兜底 P1（US2）
   async addSingleVideo(bvid: string, page: number = 0): Promise<EnqueueResult> {
     const trimmed: string = bvid.trim();
     if (trimmed === '') {
@@ -1860,7 +1859,7 @@ export class PlayerController {
       return await this.loadPlaylistAndPlay([target], 0);
     } catch (err) {
       const error = err as BusinessError;
-      // 解析失败分型（plan D7）：-404 失效 / -104 大会员直报短语；风控/网络按分型文案；
+      // 解析失败分型（v0.7-p3 plan D7）：-404 失效 / -104 大会员直报短语；风控/网络按分型文案；
       // 好友文案（-101 登录失效等）透传；raw 模板归兜底；不入队（FAILED），HomePage 与订阅弹窗两入口同收
       const info: PlayErrorInfo = PlayerController.classifyPlayError(error.message);
       let msg: string;
@@ -1879,7 +1878,7 @@ export class PlayerController {
     }
   }
 
-  // 形态 B 占位条目起播时就地展开（plan D8）：P1 原位替换本条目（currentIndex 不变），
+  // 形态 B 占位条目起播时就地展开（fix-multi-part plan D8）：P1 原位替换本条目（currentIndex 不变），
   // P2..Pn 按复合键跳过队列已有同页条目后插入其后，展开复用同一份 view 响应
   private expandPlaceholderInPlace(index: number, detail: VideoDetail): void {
     const parts: BiliVideo[] = detail.parts;
@@ -1910,7 +1909,7 @@ export class PlayerController {
       this.emitUi();
       return;
     }
-    // 非本人收藏夹门禁（US1）：folderOwnerMid=0 视为未知放行（兼容旧数据），非 0 且非本人则拦截
+    // 非本人收藏夹门禁（v0.6-p1 US1）：folderOwnerMid=0 视为未知放行（兼容旧数据），非 0 且非本人则拦截
     if (item.folderOwnerMid !== 0 && item.folderOwnerMid !== BiliSession.getInstance().mid) {
       this.statusMsg = Constants.STATUS_UNFAVORITE_NOT_OWNER;
       this.emitUi();
@@ -1997,7 +1996,7 @@ export class PlayerController {
     }, 0);
   }
 
-  // 条目元数据回填（plan R7）：duration 取播放器真实时长（this.duration 毫秒→秒，含 BiliVideo.duration
+  // 条目元数据回填（play-history-progress plan R7）：duration 取播放器真实时长（this.duration 毫秒→秒，含 BiliVideo.duration
   // 冷启动兜底已先经 upsert 写入）；cid 取 currentCid（流式路径）或队列条目 cid 中非零者。
   // 调用时机（this.currentIndex/currentCid/duration 与目标条目一致）保证回填不串曲目
   private backfillHistoryMeta(entry: PlayHistoryItem): void {
@@ -2016,7 +2015,7 @@ export class PlayerController {
     }
   }
 
-  // 更新当前条目进度（plan R6，persistProgress/切歌 flush 共用）：
+  // 更新当前条目进度（play-history-progress plan R6，persistProgress/切歌 flush 共用）：
   // 仅命中已有条目才更新（未记录过的条目等 playing 状态 upsert 创建）；
   // progress===-1（已完播）不回写正数进度，保住完播标记（不变式①）
   private updateHistoryProgressForCurrent(progressSec: number): void {
@@ -2040,9 +2039,9 @@ export class PlayerController {
     this.savePlayHistoryFileAsync();
   }
 
-  // 完播标记（plan R5）：当前条目 progress=-1 即时写盘（对齐 B 站「-1=看完」语义）；
+  // 完播标记（play-history-progress plan R5）：当前条目 progress=-1 即时写盘（对齐 B 站「-1=看完」语义）；
   // 已是 -1 则幂等跳过（含跳过写盘），避免播放 tick 高频重复落盘；
-  // 异常条目设防（D5）：异常条目播完≠看完，两条自动写 -1 路径（completed/95% 阈值）均经此处，
+  // 异常条目设防（v0.5-p5 D5）：异常条目播完≠看完，两条自动写 -1 路径（completed/95% 阈值）均经此处，
   // bvid 命中异常集不写 -1（不产假 ✓ 不污染云同步）；手动「标记已看完」不经此处不受拦
   private markCurrentHistoryCompleted(): void {
     if (this.currentIndex < 0 || this.currentIndex >= this.playlist.length) {
@@ -2072,7 +2071,7 @@ export class PlayerController {
     this.savePlayHistoryFileAsync();
   }
 
-  // 会话已播标记 + 指定下一首消费（v0.8-part1 FR-002/FR-007）：AVPlayer 'playing' 出声点唯一钩子，
+  // 会话已播标记 + 指定下一首消费（v0.8-p1 FR-002/FR-007）：AVPlayer 'playing' 出声点唯一钩子，
   // 覆盖全部起播来源；当前条目 bvid 入会话已播集（条目级），当前复合键命中 FIFO 视为消费剔除
   // （手动点播 FIFO 条目不再重复兑现）；幂等
   private markSessionPlayed(item: BiliVideo): void {
@@ -2085,7 +2084,7 @@ export class PlayerController {
     if (qi >= 0) {
       this.designatedNextQueue.splice(qi, 1);
       Logger.log('player', 'designated next consumed on play', `key=${key}`);
-      // 消费即落盘（v0.8-part4 US1 FR-004）：播放消费路径无既有保存点，补写防重启复活已消费条目
+      // 消费即落盘（v0.8-p4 US1 FR-004）：播放消费路径无既有保存点，补写防重启复活已消费条目
       AppStore.savePlaylistFile(this.playlist, this.currentIndex, this.currentTime, this.currentQualityCode,
         this.designatedNextQueue);
     }
@@ -2131,7 +2130,7 @@ export class PlayerController {
         }
         if (existing.progress === -1) {
           existing.progress = 0;
-          // 重播已听完条目（US3 边界）：上报水位归零，云端进度随之归零重记（B 站语义：看完重看从头记）
+          // 重播已听完条目（v0.5-p1-2 US3 边界）：上报水位归零，云端进度随之归零重记（B 站语义：看完重看从头记）
           this.heartbeatLastSentSec = 0;
         }
         item = existing;
@@ -2163,8 +2162,8 @@ export class PlayerController {
     this.emitUi();
   }
 
-  // 单条删除（US3 FR-009，复合键分P 粒度）：按 (bvid,page) 移除一条历史，异步写盘；未命中静默。
-  // 面板条目自带左滑刷新，不在此处 emitUi（FR-014：clearPlayHistory 行为保持不变）
+  // 单条删除（play-history-progress US3 FR-009，复合键分P 粒度）：按 (bvid,page) 移除一条历史，异步写盘；未命中静默。
+  // 面板条目自带左滑刷新，不在此处 emitUi（play-history-progress FR-014：clearPlayHistory 行为保持不变）
   removePlayHistoryItem(bvid: string, page: number): void {
     const idx: number = this.indexOfPlayHistory(bvid, page);
     if (idx < 0) {
@@ -2176,7 +2175,7 @@ export class PlayerController {
     this.savePlayHistoryFileAsync();
   }
 
-  // 批量删除所选历史（v0.4-Part1-ux-fixes US4）：多选删除所用，入参为复合键（bvid:page，经
+  // 批量删除所选历史（v0.4-p1-2 US4）：多选删除所用，入参为复合键（bvid:page，经
   // BiliVideo.itemKeyOf 合成），单次版本计数+单次异步写盘；未命中静默
   removeSelectedHistory(keys: string[]): void {
     if (keys.length === 0) {
@@ -2198,7 +2197,7 @@ export class PlayerController {
     this.savePlayHistoryFileAsync();
   }
 
-  // 批量标记已看完（v0.5-part2 multiselect-rework）：bvid 级幂等——isPlayed 命中跳过（不重复建条目）；
+  // 批量标记已看完（v0.5-p2-1）：bvid 级幂等——isPlayed 命中跳过（不重复建条目）；
   // 未命中查 bvid:page 复合键历史条目，有则置 progress=-1，无则 fromVideo 新建置 -1 后 unshift；
   // 仅本地写史，不向 B 站云端上报完播心跳；批量只落一次盘（HISTORY_MAX 截断 → 版本计数 → 广播）
   markWatched(items: BiliVideo[]): void {
@@ -2237,7 +2236,7 @@ export class PlayerController {
     this.emitUi();
   }
 
-  // 批量移动（US1）：选中扁平下标就地重排——toEnd 移到队尾，否则移到当前播放条目游程之后；
+  // 批量移动（v0.7-p1 US1）：选中扁平下标就地重排——toEnd 移到队尾，否则移到当前播放条目游程之后；
   // 越界下标自然丢弃（与 entries 失步防御），当前播放条目游程内下标剔除（当前条目原位不动，
   // 游程识别复用 getQueueEntryGroups 单一来源）；movers 与 kept 各自保序重组；
   // currentIndex 以当前条目复合键在重组后线性重定位（非下标换算）；不动播放器不打断播放；
@@ -2315,7 +2314,7 @@ export class PlayerController {
     if (keys.length === 0) {
       return;
     }
-    // —— 队列移除联动取消收藏（US1）：命中集 = 本人收藏夹来源条目（folderIds 非空且
+    // —— 队列移除联动取消收藏（v0.6-p1 US1）：命中集 = 本人收藏夹来源条目（folderIds 非空且
     // folderOwnerMid === session.mid，已登录），聚合二次询问；确认后随本地移除联动云端取消收藏，
     // 拒绝/无命中/回调未设/移除前确认开关关（KEY_UNFAVORITE_ASK，默认开）→ 纯移除（现状语义）——
     const session: BiliSession = BiliSession.getInstance();
@@ -2366,7 +2365,7 @@ export class PlayerController {
     }
     this.playlist = kept;
     this.playlistVersion++;
-    // 指定下一首剔除（v0.8-part1 FR-007）：被移复合键同步出队；
+    // 指定下一首剔除（v0.8-p1 FR-007）：被移复合键同步出队；
     // 其余移除路径（unfavorite 直删等）由消费时 indexOfKey 校验兜底
     for (let i = this.designatedNextQueue.length - 1; i >= 0; i--) {
       if (keys.indexOf(this.designatedNextQueue[i]) >= 0) {
@@ -2405,7 +2404,7 @@ export class PlayerController {
     }
   }
 
-  // 确认后的云端取消收藏批（US1）：本地移除完成后串行执行，失败不回滚不阻塞本地移除；
+  // 确认后的云端取消收藏批（v0.6-p1 US1）：本地移除完成后串行执行，失败不回滚不阻塞本地移除；
   // aid+folderIds 组合去重（同视频多分P/多夹只发一次），全成/部分败聚合写 toast 快照 + tick 广播
   private async unfavoriteRemovedItems(targets: BiliVideo[]): Promise<void> {
     const seen: Set<string> = new Set<string>();
@@ -2436,7 +2435,7 @@ export class PlayerController {
     this.emitUi();
   }
 
-  // 清空队列编排（R3 US4）：调用即停声（准备期同时收意图），CLEAR_QUEUE_DATA_DELAY_MS 后
+  // 清空队列编排（v0.3-r3 R3 US4）：调用即停声（准备期同时收意图），CLEAR_QUEUE_DATA_DELAY_MS 后
   // 经 removeSelectedFromPlaylist(全量复合键) 复用清数据/停播/持久化链路
   clearAllWithExitDelay(): void {
     this.player.pause();
@@ -2452,9 +2451,9 @@ export class PlayerController {
     }, Constants.CLEAR_QUEUE_DATA_DELAY_MS);
   }
 
-  // 清除已播（v0.3-bugfix-round2 US3 重写）：已听完判定与播放模式无关——播放历史 progress===-1 即已听完，
-  // 失效（X，v0.7-part3）与异常标记条目一并纳入；移除 playlist 中全部命中条目
-  // （含命中的当前播放条目，v0.6-part1 追加）；
+  // 清除已播（v0.3-r2 US3 重写）：已听完判定与播放模式无关——播放历史 progress===-1 即已听完，
+  // 失效（X，v0.7-p3）与异常标记条目一并纳入；移除 playlist 中全部命中条目
+  // （含命中的当前播放条目，v0.6-p1 追加）；
   // 复用 removeSelectedFromPlaylist 批量链路
   // （removingCurrent/removedBeforeCurrent 索引修正、空队列重置、持久化全套语义）；
   // 无可清静默返回；UI 侧经 playlistVersion++ 触发 syncFrom 的 diff 增量刷新
@@ -2466,7 +2465,7 @@ export class PlayerController {
     await this.removeSelectedFromPlaylist(toRemove);
   }
 
-  // 该 bvid 全部分P 历史中 viewAt 最新的一条（US6 归并行状态源 / US7 组头点击两段判定①）；
+  // 该 bvid 全部分P 历史中 viewAt 最新的一条（fix-multi-part US6 归并行状态源 / US7 组头点击两段判定①）；
   // 纯只读查询，无写入无广播；无历史返回 null
   latestHistoryOf(bvid: string): PlayHistoryItem | null {
     let latest: PlayHistoryItem | null = null;
@@ -2496,7 +2495,7 @@ export class PlayerController {
     return idx >= 0 && this.playHistory[idx].progress === -1;
   }
 
-  // 条目级完播派生判定（v0.8-part1 plan D3，零存储）：歌单内该 bvid 的全部分P
+  // 条目级完播派生判定（v0.8-p1 plan D3，零存储）：歌单内该 bvid 的全部分P
   // 在 playHistory 中 progress=-1 才算完播；纯查询零副作用；歌单无该 bvid 返回 false
   private isEntryCompleted(bvid: string): boolean {
     let found: boolean = false;
@@ -2512,7 +2511,7 @@ export class PlayerController {
     return found;
   }
 
-  // 全完播判定（v0.8-part1 plan D5）：歌单内全部条目游程均完播（含当前条目组）；
+  // 全完播判定（v0.8-p1 plan D5）：歌单内全部条目游程均完播（含当前条目组）；
   // 空歌单返回 false（无从判定，不触发停止路径）
   private isAllEntriesCompleted(): boolean {
     const groups: number[][] = this.getQueueEntryGroups();
@@ -2524,8 +2523,8 @@ export class PlayerController {
     return groups.length > 0;
   }
 
-  // 可清理集合：playlist 中已听完、失效（X，v0.7-part3 追加）或异常标记的全部复合键，含命中的当前播放条目
-  // （v0.6-part1 追加：当前在播条目已看完/异常同样移除，复用 removingCurrent 自动切播链路）
+  // 可清理集合：playlist 中已听完、失效（X，v0.7-p3 追加）或异常标记的全部复合键，含命中的当前播放条目
+  // （v0.6-p1 追加：当前在播条目已看完/异常同样移除，复用 removingCurrent 自动切播链路）
   private collectPlayedRemovable(): string[] {
     const result: string[] = [];
     for (let i = 0; i < this.playlist.length; i++) {
@@ -2537,9 +2536,9 @@ export class PlayerController {
     return result;
   }
 
-  // 条目口径已播可清计数（v0.4-queue-multi-p-item plan D7）：bvid 已播完（isPlayed）、
-  // 失效（hasInvalid，v0.7-part3 追加）或异常标记（hasAnomaly，v0.5-part5 追加）的条目数
-  // （组算 1，含命中的当前播放条目，v0.6-part1 追加）；
+  // 条目口径已播可清计数（queue-multi-p-item plan D7）：bvid 已播完（isPlayed）、
+  // 失效（hasInvalid，v0.7-p3 追加）或异常标记（hasAnomaly，v0.5-p5 追加）的条目数
+  // （组算 1，含命中的当前播放条目，v0.6-p1 追加）；
   // collectPlayedRemovable/clearPlayedItems 的分P 键集合不动
   playedRemovableCount(): number {
     const groups: number[][] = this.getQueueEntryGroups();

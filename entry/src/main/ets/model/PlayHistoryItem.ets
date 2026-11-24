@@ -26,7 +26,7 @@ export class PlayHistoryItem {
   @Trace page: number = 0;
   @Trace videoTitle: string = '';
   @Trace partTitle: string = '';
-  // 特殊标记（v0.7-part4）：由对应 BiliVideo 同步，历史页角标用
+  // 特殊标记（v0.7-p4）：由对应 BiliVideo 同步，历史页角标用
   @Trace isUpowerExclusive: boolean = false;
   @Trace isInteractive: boolean = false;
   @Trace isPaid: boolean = false;
@@ -41,7 +41,7 @@ export class PlayHistoryItem {
     r.sourceType = sourceType;
     r.viewAt = Math.floor(playedAtMs / 1000);
     r.cover = video.cover;
-    // cid/duration 冷启动兜底（plan R7）：BiliVideo.cid 与 duration 均已是秒/直通单位
+    // cid/duration 冷启动兜底（play-history-progress plan R7）：BiliVideo.cid 与 duration 均已是秒/直通单位
     r.cid = video.cid;
     r.duration = video.duration;
     r.page = video.page > 0 ? video.page : 1;
@@ -93,7 +93,7 @@ export class PlayHistoryItem {
     if (rec['viewAt'] !== undefined) {
       r.viewAt = rec['viewAt'] as number;
     } else if (rec['playedAt'] !== undefined) {
-      // 旧格式迁移（plan R2）：viewAt 缺失且旧 playedAt（毫秒）存在 → 秒
+      // 旧格式迁移（play-history-progress plan R2）：viewAt 缺失且旧 playedAt（毫秒）存在 → 秒
       r.viewAt = Math.floor((rec['playedAt'] as number) / 1000);
     }
     if (rec['cover'] !== undefined) {

@@ -16,7 +16,7 @@ export class AudioPlayer {
   private _duration: number = 0;
   private _isPrepared: boolean = false;
   private desiredRate: number = 1.0;
-  // 实例代际号（US2）：每次重建/销毁递增；setupCallbacks 捕获当代代际，
+  // 实例代际号（v0-r2 US2）：每次重建/销毁递增；setupCallbacks 捕获当代代际，
   // 回调先比对代际再更新共享状态，杜绝旧实例残余事件（timeUpdate/stateChange 等）串扰新剧集
   private generation: number = 0;
   onStateChange: ((state: string) => void) | undefined = undefined;
@@ -140,7 +140,7 @@ export class AudioPlayer {
     return player;
   }
 
-  // 远程流式数据源（US2）：CDN 直链 + Referer/UA 请求头，播放器内核边下边播、按需分段拉取（seek 由内核处理）；
+  // 远程流式数据源（v0-r2 US2）：CDN 直链 + Referer/UA 请求头，播放器内核边下边播、按需分段拉取（seek 由内核处理）；
   // 每次调用全量重建 AVPlayer，失败重试安全；prepared/error 等回调复用既有订阅机制
   async setStreamSource(url: string): Promise<void> {
     const player: media.AVPlayer = await this.recreatePlayer();
@@ -161,7 +161,7 @@ export class AudioPlayer {
     await player.prepare();
   }
 
-  // 旁路实例等待 prepared 落定（v0.8-part3）：setStreamSource 发出 prepare 即返回，主实例路径零改动
+  // 旁路实例等待 prepared 落定（v0.8-p3）：setStreamSource 发出 prepare 即返回，主实例路径零改动
   async waitPrepared(timeoutMs: number): Promise<void> {
     await this.waitForState('prepared', timeoutMs);
   }

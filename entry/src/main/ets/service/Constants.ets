@@ -44,7 +44,7 @@ export class Constants {
   static readonly KEY_HISTORY_SYNC: string = 'historySync';
   // 移除前确认开关持久化键（1=弹窗确认 0=直接移除，默认弹窗；关闭后歌单移除纯本地、云端收藏保留）
   static readonly KEY_UNFAVORITE_ASK: string = 'unfavoriteAsk';
-  // 上次首页静默刷新完成时刻（毫秒时间戳）：跨启动 CD 判定基准（D9 回拨规则）
+  // 上次首页静默刷新完成时刻（毫秒时间戳）：跨启动 CD 判定基准（v0.5-p4 D9 回拨规则）
   static readonly KEY_LAST_SILENT_REFRESH_AT: string = 'lastSilentRefreshAt';
   // 数据源异常 bvid 集（JSON 数组字符串，per-bvid 持久化异常标记，不云同步）
   static readonly KEY_ANOMALY_BVIDS: string = 'anomalyBvids';
@@ -74,7 +74,7 @@ export class Constants {
   static readonly AS_SHOW_SETTINGS_PAGE: string = 'showSettingsPage';
   static readonly AS_SHOW_LOG_PAGE: string = 'showLogPage';
   static readonly AS_HOME_REFRESH_TICK: string = 'homeRefreshTick';
-  // 系统分享导入文本传输键（US5）：EntryAbility 取分享原文写入，HomePage 消费即清
+  // 系统分享导入文本传输键（v0.7-p2 US5）：EntryAbility 取分享原文写入，HomePage 消费即清
   static readonly AS_SHARE_IMPORT_TEXT: string = 'shareImportText';
 
   // —— 受限色值（窗口层 API / Canvas 2D 不接受颜色资源引用，只能写字面量） ——
@@ -98,7 +98,7 @@ export class Constants {
   static readonly PROGRESS_SAVE_INTERVAL_MS: number = 5000;
   // 完播阈值（play-history-progress FR-003/FR-004）：进度 ≥ 时长×该比例视为已听完（progress=-1），不暴露为设置
   static readonly PLAY_COMPLETE_RATIO: number = 0.95;
-  // 数据源异常判定阈值（v0.5-part5）：流时长 < 元数据时长×该比例判为试听流（真机校准）
+  // 数据源异常判定阈值（v0.5-p5）：流时长 < 元数据时长×该比例判为试听流（真机校准）
   static readonly ANOMALY_DURATION_RATIO: number = 0.5;
   static readonly PREV_SEEK_THRESHOLD_MS: number = 3000;
   static readonly CONNECT_TIMEOUT_MS: number = 15000;
@@ -107,7 +107,7 @@ export class Constants {
   static readonly SHORT_LINK_CONNECT_MS: number = 8000;
   static readonly SHORT_LINK_READ_MS: number = 8000;
   static readonly STREAM_TIMEOUT_MS: number = 120000;
-  // —— 无缝音质切换超时（v0.8-part3）：旁路实例 prepared 等待 / 起播出声确认上限，超时放弃换档保旧流 ——
+  // —— 无缝音质切换超时（v0.8-p3）：旁路实例 prepared 等待 / 起播出声确认上限，超时放弃换档保旧流 ——
   static readonly TOKEN_SWITCH_PREPARED_TIMEOUT_MS: number = 8000;
   static readonly TOKEN_SWITCH_PLAY_TIMEOUT_MS: number = 3000;
   static readonly SLEEP_TIMER_PRESETS: number[] = [15 * 60, 30 * 60, 60 * 60];
@@ -122,32 +122,32 @@ export class Constants {
   static readonly DEBUG_TAP_WINDOW_MS: number = 2000;
 
   // —— 播放微调与防抖（自 PlayerOverlay/PlayerController 迁入；播放页按钮与播控中心快进快退共用同一来源） ——
-  // ±15s 进度微调步长（ms）：固定 15 秒，不可配置（spec FR-013）
+  // ±15s 进度微调步长（ms）：固定 15 秒，不可配置（player-redesign FR-013）
   static readonly SEEK_STEP_MS: number = 15000;
   // seekBy 连按合并防抖窗口（ms）：防抖期内的新调用基于最新进度叠加，到期仅执行最终一次 player.seek
   static readonly SEEK_BY_DEBOUNCE_MS: number = 250;
-  // 应用内日志环形缓冲上限（条）：超限淘汰最旧（US9）
+  // 应用内日志环形缓冲上限（条）：超限淘汰最旧（v0-r4 US9）
   static readonly LOG_BUFFER_MAX: number = 500;
-  // 日志落盘文件名（US9）：位于应用沙箱 filesDir，单行可读格式追加写入
+  // 日志落盘文件名（v0-r4 US9）：位于应用沙箱 filesDir，单行可读格式追加写入
   static readonly LOG_FILE_NAME: string = 'biliradio_log.txt';
   // 日志落盘硬上限（字节）：超限保留最新一半重写（滚动淘汰），文件占用有界
   static readonly LOG_FILE_MAX_BYTES: number = 512 * 1024;
 
-  // —— 删除补位动画与面板关闭时序（v0.3-bugfix-round2 US6/US8）——
+  // —— 删除补位动画与面板关闭时序（v0.3-r2 US6/US8）——
   // 删除数据变更包 animateTo 的过渡时长（ms）：notifyDataDelete 落闭包内即补位动画
   static readonly TOKEN_DELETE_ANIM_MS: number = 250;
   // 队列面板滑出动画结束后卸载/关浮层的延时（ms）：略长于 300ms 滑出动画保证完整播完
   static readonly DRAWER_CLOSE_DELAY_MS: number = 310;
-  // 清空队列延时清数据（ms，v0.3-bugfix-round3 US4）：先关层后清数据，延时大于浮层 350ms 转场保证清数据时浮层已卸载
+  // 清空队列延时清数据（ms，v0.3-r3 US4）：先关层后清数据，延时大于浮层 350ms 转场保证清数据时浮层已卸载
   static readonly CLEAR_QUEUE_DATA_DELAY_MS: number = 400;
-  // 设置/日志层滑入时长（v0.4-Part2 z-layer-refactor）：x 轴 translate 转场，曲线 Friction，对齐原导航 push 手感
+  // 设置/日志层滑入时长（v0.4-p2）：x 轴 translate 转场，曲线 Friction，对齐原导航 push 手感
   static readonly PAGE_LAYER_SLIDE_MS: number = 350;
 
-  // —— 多选进出过渡（v0.5-part2 multiselect-rework）：订阅源/队列/历史三处多选共用动效档 ——
+  // —— 多选进出过渡（v0.5-p2-1）：订阅源/队列/历史三处多选共用动效档 ——
   // 进出多选全链路过渡时长（ms）：行首勾选框宽度/透明度、顶栏与面板头部双态、底部操作条滑入滑出
   static readonly TOKEN_SELECT_ANIM_MS: number = 300;
 
-  // —— 复选框区拖选（v0.5-part2 multiselect-rework 追加2 US4）：方向性扫选与边缘自动滚动参数 ——
+  // —— 复选框区拖选（v0.5-p2-1 追加2 US4）：方向性扫选与边缘自动滚动参数 ——
   // 拖选手指进入列表可视区上下边缘带（vp）时启动对应方向自动滚动
   static readonly SELECT_SWEEP_EDGE_ZONE: number = 48;
   // 自动滚动每 tick 位移（vp）
@@ -161,7 +161,7 @@ export class Constants {
   static readonly DURATION_BADGE_SHADOW_RADIUS: number = 8;
   static readonly DURATION_BADGE_SHADOW_OFFSET_Y: number = 1;
 
-  // —— 玻璃浮层（GlassSheet，v0.4-Part1 sheet-visual-redesign）：动画/渐隐/投影参数唯一来源 ——
+  // —— 玻璃浮层（GlassSheet，v0.4-p1-1）：动画/渐隐/投影参数唯一来源 ——
   // 浮层滑入+渐显动画时长（ms）：遮罩 OPACITY 过渡同步此值
   static readonly SHEET_SLIDE_MS: number = 300;
   // 列表底部渐隐带高度（px）
@@ -173,12 +173,12 @@ export class Constants {
   static readonly SHEET_SHADOW_RADIUS_DARK: number = 24;
   static readonly SHEET_SHADOW_OFFSET_DARK: number = -8;
 
-  // —— 左滑删除圆钮（v0.3-bugfix-round3 US6）：圆形红底垃圾桶，尺寸/圆角/图标字号唯一来源 ——
+  // —— 左滑删除圆钮（v0.3-r3 US6）：圆形红底垃圾桶，尺寸/圆角/图标字号唯一来源 ——
   static readonly SWIPE_DELETE_BTN_SIZE: number = 44;
   static readonly SWIPE_DELETE_BTN_RADIUS: number = 22;
   static readonly SWIPE_DELETE_ICON_FONT: number = 18;
 
-  // —— B 站端点与 UA（US3：未登录查询 UP 投稿风控修复） ——
+  // —— B 站端点与 UA（v0-r4 US3：未登录查询 UP 投稿风控修复） ——
   // APP 投稿端点：BiliDroid 客户端渠道，无需 cookie/WBI 即可查询投稿列表
   static readonly BILI_APP_ARCHIVE_URL: string = 'https://app.bilibili.com/x/v2/space/archive/cursor';
   static readonly TV_APP_KEY: string = 'dfca71928277209b';
@@ -189,9 +189,9 @@ export class Constants {
   static readonly BILI_APP_USER_AGENT: string =
     'Mozilla/5.0 BiliDroid/8.43.0 (bbcallen@gmail.com) os/android model/android mobi_app/android build/8430300 channel/master innerVer/8430300 osVer/15 network/2';
 
-  // —— 播放按钮尺寸同源（US1/US4）：按钮直径为唯一尺寸源，缓冲加载指示尺寸由此派生，调整不再脱节 ——
+  // —— 播放按钮尺寸同源（v0-r3 US1 / v0-r4 US4）：按钮直径为唯一尺寸源，缓冲加载指示尺寸由此派生，调整不再脱节 ——
   static readonly PLAY_BTN_DIAMETER: number = 80;   // 播放按钮直径
-  // 控制按钮命中区边长（v0.4-Part1-ux-fixes US1）：顶栏收起键容器化点击目标，与控制栏四键同尺寸
+  // 控制按钮命中区边长（v0.4-p1-2 US1）：顶栏收起键容器化点击目标，与控制栏四键同尺寸
   static readonly CONTROL_BTN_SIZE: number = 44;
 
   // —— 播放层宽屏适配：宽屏（宽 ≥600vp，与 Index 媒体查询同口径）下底栏内部间距改为相对浮层高度的比例
@@ -201,7 +201,7 @@ export class Constants {
   static readonly PLAYER_WIDE_ACTION_GAP_RATIO: number = 0.03;
   static readonly PLAYER_WIDE_BOTTOM_GAP_RATIO: number = 0.02;
 
-  // —— 玻璃图标按钮（v0.4-Part1-ux-fixes US4）：队列/历史面板头部 36×36 图标按钮公式唯一来源 ——
+  // —— 玻璃图标按钮（v0.4-p1-2 US4）：队列/历史面板头部 36×36 图标按钮公式唯一来源 ——
   static readonly GLASS_ICON_BTN_SIZE: number = 36;
   static readonly GLASS_BLUR: number = 20;
   static readonly GLASS_ICON_BTN_BORDER: number = 1;
@@ -209,23 +209,23 @@ export class Constants {
   // 多选行首 Checkbox 尺寸
   static readonly SELECT_CHECKBOX_SIZE: number = 20;
 
-  // —— 账号行头像（v0.4-Part1-ux-fixes US9）：圆形裁切边长唯一来源 ——
+  // —— 账号行头像（v0.4-p1-2 US9）：圆形裁切边长唯一来源 ——
   static readonly ACCOUNT_AVATAR_SIZE: number = 32;
 
-  // —— 登出胶囊（v0.8-part2-settings-regroup）：账号用户行行尾「登出」胶囊尺寸唯一来源 ——
+  // —— 登出胶囊（v0.8-p2）：账号用户行行尾「登出」胶囊尺寸唯一来源 ——
   static readonly LOGOUT_PILL_H: number = 32;
   static readonly LOGOUT_PILL_RADIUS: number = 16;
 
-  // —— 加载更多失败冷却（US2）：失败后冷却期内禁用重试，防止弱网下反复请求 ——
+  // —— 加载更多失败冷却（v0-r6 US2）：失败后冷却期内禁用重试，防止弱网下反复请求 ——
   static readonly LOAD_OLDER_FAIL_COOLDOWN_MS: number = 3000;
 
-  // —— 刷新止血与反馈（v0.5-part4 risk-control）：静默刷新 CD（⑭ 分层：冷启动 15 分钟 / 回前台与回首页类 1 小时）/ Web 链风控进程冷却 / 静默失败 toast 去重窗 ——
+  // —— 刷新止血与反馈（v0.5-p4）：静默刷新 CD（⑭ 分层：冷启动 15 分钟 / 回前台与回首页类 1 小时）/ Web 链风控进程冷却 / 静默失败 toast 去重窗 ——
   static readonly HOME_COLD_START_REFRESH_CD_MS: number = 15 * 60 * 1000;
   static readonly HOME_FOREGROUND_REFRESH_CD_MS: number = 60 * 60 * 1000;
   static readonly WEB_CHAIN_COOLDOWN_MS: number = 10 * 60 * 1000;
   static readonly SILENT_REFRESH_FAIL_DEDUP_MS: number = 3000;
 
-  // —— 订阅翻页页大小（KI-9 页界统一）：APP 签名链服务端钳 20，Web 链与记账统一对齐 ——
+  // —— 订阅翻页页大小（engineering-refactor KI-9 页界统一）：APP 签名链服务端钳 20，Web 链与记账统一对齐 ——
   static readonly UP_PAGE_SIZE: number = 20;
   static readonly SEASON_PAGE_SIZE: number = 20;
   static readonly FAV_PAGE_SIZE: number = 20;
@@ -242,9 +242,9 @@ export class Constants {
   // —— 清除已播（queue-redesign US4）：无可清 toast 与二次确认框文案 ——
   static readonly TOAST_QUEUE_NO_PLAYED: string = '没有可清除的已播内容';
   static readonly DIALOG_CLEAR_PLAYED_TITLE: string = '清除已播';
-  // v0.3-bugfix-round2 US3：计数式文案（N 由实际可清条目数代入）
+  // v0.3-r2 US3：计数式文案（N 由实际可清条目数代入）
   static readonly DIALOG_CLEAR_PLAYED_COUNT_MSG: string = '确定清除 N 首已播条目吗？';
-  // —— 删除二次确认（v0.3-bugfix-round2 US1/US2）：三处左滑 + 多选移除 ——
+  // —— 删除二次确认（v0.3-r2 US1/US2）：三处左滑 + 多选移除 ——
   static readonly DIALOG_DELETE_HISTORY_TITLE: string = '删除播放记录';
   static readonly DIALOG_DELETE_HISTORY_MSG: string = '确定删除这条播放记录吗？';
   static readonly DIALOG_DELETE_QUEUE_ITEM_TITLE: string = '移除队列条目';
@@ -254,49 +254,49 @@ export class Constants {
   static readonly DIALOG_DELETE_SUB_MSG: string = '确定删除该订阅吗？';
   static readonly DIALOG_REMOVE_SELECTED_TITLE: string = '移除所选';
   static readonly DIALOG_REMOVE_SELECTED_MSG: string = '确定移除所选条目吗？';
-  // —— 标记已看完（v0.5-part2 multiselect-rework US1）：订阅源多选批量本地标记，二次确认与 toast（N 由选中数代入）
+  // —— 标记已看完（v0.5-p2-1 US1）：订阅源多选批量本地标记，二次确认与 toast（N 由选中数代入）
   static readonly DIALOG_MARK_WATCHED_TITLE: string = '标记已看完';
   static readonly DIALOG_MARK_WATCHED_MSG: string = '确定标记 N 集为已看完吗？';
   static readonly TOAST_MARK_WATCHED: string = '已标记 N 集为已看完';
-  // —— 播放出错提醒（US6）：同一 bvid+阶段时间窗内去重（仅广播提醒去重，日志恒记）与 toast 文案 ——
+  // —— 播放出错提醒（v0.5-p3 US6）：同一 bvid+阶段时间窗内去重（仅广播提醒去重，日志恒记）与 toast 文案 ——
   static readonly PLAYBACK_ERROR_DEDUP_MS: number = 3000;
   static readonly TOAST_PLAYBACK_ERROR: string = '播放出错，请稍后重试';
-  // —— 播放失败分型文案（v0.7-part3）：确定性失败 toast（失效/大会员/时长异常）与瞬时失败重试提示 ——
+  // —— 播放失败分型文案（v0.7-p3）：确定性失败 toast（失效/大会员/时长异常）与瞬时失败重试提示 ——
   static readonly TOAST_INVALID_SKIP: string = '视频已失效，已跳过';
   static readonly TOAST_VIP_SKIP: string = '需要大会员，已跳过';
-  // —— 门禁码直报（v0.7-part4 special-marks）：充电/付费门禁跳过 toast 与互动拦截文案 ——
+  // —— 门禁码直报（v0.7-p4）：充电/付费门禁跳过 toast 与互动拦截文案 ——
   static readonly TOAST_UPOWER_SKIP: string = '需要充电，已跳过';
   static readonly TOAST_PAID_SKIP: string = '需要付费，已跳过';
   static readonly TOAST_INTERACTIVE_BLOCKED: string = '互动视频不支持播放';
-  // —— fav 批量入队过程提示（v0.7-part4 真机反馈）：详情补全数秒，确认时即时反馈 ——
+  // —— fav 批量入队过程提示（v0.7-p4 真机反馈）：详情补全数秒，确认时即时反馈 ——
   static readonly TOAST_FAV_COMPLETING: string = '正在补全标志…';
   static readonly TOAST_NETWORK_RETRY: string = '网络异常，请检查网络后重试';
   static readonly TOAST_RISK_RETRY: string = '请求被拦截，请稍后重试';
-  // —— 数据源异常提醒（v0.5-part5）：时长异常跳过 toast（报观测事实，不说明原因） ——
+  // —— 数据源异常提醒（v0.5-p5）：时长异常跳过 toast（报观测事实，不说明原因） ——
   static readonly TOAST_ANOMALY_SKIP: string = '音源异常，已跳过';
-  // —— 刷新结果通知（v0.5-part4 risk-control）：手动刷新成功 / 静默刷新失败（N 由失败订阅数代入）——
+  // —— 刷新结果通知（v0.5-p4）：手动刷新成功 / 静默刷新失败（N 由失败订阅数代入）——
   static readonly TOAST_REFRESHED: string = '已更新';
   static readonly TOAST_SILENT_REFRESH_FAIL: string = 'N 个订阅刷新失败';
   // 静默刷新新集正向增量提醒（N 由全源新集总数增量代入）
   static readonly TOAST_NEW_EPISODES_FOUND: string = '发现 N 集新节目';
-  // —— 订阅源详情页「更多」菜单文案（v0.7-part2 US6）——
+  // —— 订阅源详情页「更多」菜单文案（v0.7-p2 US6）——
   static readonly MENU_LABEL_REFRESH: string = '刷新';
   static readonly MENU_LABEL_UNSUBSCRIBE: string = '取消订阅';
   // 会话级排序开关菜单项（fav/season/series 显示，UP 时间序即获取语义不显示）
   static readonly MENU_LABEL_SORT_BY_TIME: string = '按时间排序';
-  // 下拉刷新自定义提示区文案（US6 真机反馈修正，refreshingContent 承载，onStateChange 全状态机切换）
+  // 下拉刷新自定义提示区文案（v0.7-p2 US6 真机反馈修正，refreshingContent 承载，onStateChange 全状态机切换）
   static readonly REFRESH_HINT_PULL: string = '下拉刷新';
   static readonly REFRESH_HINT_RELEASE: string = '释放刷新';
   static readonly REFRESH_HINT_REFRESHING: string = '刷新中';
-  // 分享导入拒收文案（US5）：分享文本抽不到 B 站链接时提示，不弹面板
+  // 分享导入拒收文案（v0.7-p2 US5）：分享文本抽不到 B 站链接时提示，不弹面板
   static readonly TOAST_SHARE_UNSUPPORTED: string = '不支持分享的内容';
-  // —— 关于页外链二次确认（v0.4-Part1-ux-fixes US7）：确认后 openLink 拉起系统浏览器 ——
+  // —— 关于页外链二次确认（v0.4-p1-2 US7）：确认后 openLink 拉起系统浏览器 ——
   static readonly DIALOG_OPEN_LINK_TITLE: string = '跳转到外部浏览器？';
-  // —— 队列空态引导（queue-redesign US1） ——
+  // —— 队列空态引导（queue-redesign FR-013） ——
   static readonly QUEUE_EMPTY_HINT: string = '到订阅源详情页播放节目，或在首页点「＋」添加订阅';
-  // 队列分P 窄行左缩进（D15）：对齐视频头行封面右侧文本起点（TOKEN_SPACE_L + 封面 44 + TOKEN_SPACE_10）
+  // 队列分P 窄行左缩进（fix-multi-part D15）：对齐视频头行封面右侧文本起点（TOKEN_SPACE_L + 封面 44 + TOKEN_SPACE_10）
   static readonly QUEUE_PART_INDENT: number = 70;
-  // —— 队列移除联动取消收藏（v0.6-part1 US1）：二次确认弹窗（N 占位）/ 结果 toast（成功 N / 部分失败 N+M）/ 非本人门禁 ——
+  // —— 队列移除联动取消收藏（v0.6-p1 US1）：二次确认弹窗（N 占位）/ 结果 toast（成功 N / 部分失败 N+M）/ 非本人门禁 ——
   static readonly DIALOG_UNFAVORITE_TITLE: string = '同时取消收藏？';
   static readonly DIALOG_UNFAVORITE_MSG: string = '移除的 N 个条目来自你的收藏夹，要同时取消收藏吗？';
   static readonly DIALOG_UNFAVORITE_CONFIRM: string = '同时取消收藏';
@@ -318,7 +318,7 @@ export class Constants {
   static readonly PALETTE_GRAY_SPREAD: number = 24;
   // 占比色感知亮度低于该值视为过暗（黑边/暗部主导），改取最高饱和色
   static readonly PALETTE_DARK_LUMA: number = 50;
-  // 播放页封面上边距（vp）：US10 基础上下移，给光晕上方留渲染空间（US5 顶栏截断缓解）
+  // 播放页封面上边距（vp）：v0-r3 US10 基础上下移，给光晕上方留渲染空间（v0.3-r3 US5 顶栏截断缓解）
   static readonly COVER_TOP_GAP: number = 40;
   // 背景衍生色饱和度区间（0-1）：压至该区间保证柔和不抢眼
   static readonly PALETTE_BG_SAT_MIN: number = 0.10;
@@ -331,7 +331,7 @@ export class Constants {
   // 背景渐变首取色淡入时长（ms）
   static readonly PALETTE_BG_REVEAL_MS: number = 500;
 
-  // —— 封面尺寸档位（US6）：列表缩略图/播放页大封面/播控中心降档，尺寸只需在此调整 ——
+  // —— 封面尺寸档位（v0-r6 US6）：列表缩略图/播放页大封面/播控中心降档，尺寸只需在此调整 ——
   static readonly COVER_THUMB_W: number = 240;
   static readonly COVER_THUMB_H: number = 240;
   static readonly COVER_BIG_W: number = 672;
@@ -339,7 +339,7 @@ export class Constants {
   static readonly COVER_SAVER_W: number = 480;
   static readonly COVER_SAVER_H: number = 270;
 
-  // —— 历史同步心跳（v0.5 cloud-history-sync）：web heartbeat 端点 + 熔断/节流参数 ——
+  // —— 历史同步心跳（v0.5-p1-2）：web heartbeat 端点 + 熔断/节流参数 ——
   // web heartbeat 心跳上报端点（PiliPlus 同源；form POST：bvid/cid/played_time/type=3=UGC/csrf）
   static readonly BILI_HEARTBEAT_URL: string = 'https://api.bilibili.com/x/click-interface/web/heartbeat';
   // 心跳连续失败熔断阈值（次）：达到后本分P 停止上报，切分P/重新起播复位
@@ -350,22 +350,22 @@ export class Constants {
   // 行内小封面尺寸——CoverThumb 默认值，队列/历史扫选步长推导引用，改它需同步核对步长换算
   static readonly LIST_THUMB_SIZE: number = 44;
 
-  // —— 订阅详情页剧集行缩略图（v0.5-part1-source-page-redesign）：16:9 左图右文行，显示档 vp / 请求档 px ——
+  // —— 订阅详情页剧集行缩略图（v0.5-p1-3）：16:9 左图右文行，显示档 vp / 请求档 px ——
   static readonly EPISODE_THUMB_W: number = 121;
   static readonly EPISODE_THUMB_H: number = 68;
   static readonly EPISODE_THUMB_REQ_W: number = 480;
   static readonly EPISODE_THUMB_REQ_H: number = 270;
 
-  // —— 订阅详情页页头等高（v0.5-part2-source-page-polish）：封面与文字列统一高度基准 ——
+  // —— 订阅详情页页头等高（v0.5-p2-2）：封面与文字列统一高度基准 ——
   static readonly SOURCE_HEADER_H: number = 56;
 
-  // —— 关于页链接（v0.4-Part1-ux-fixes US7）：项目双托管地址 + 参考项目仓库，统一二次确认跳转 ——
+  // —— 关于页链接（v0.4-p1-2 US7）：项目双托管地址 + 参考项目仓库，统一二次确认跳转 ——
   static readonly LINK_PROJECT_GITCODE: string = 'https://gitcode.com/Link-Z-233/BiliRadio';
   static readonly LINK_PROJECT_GITHUB: string = 'https://github.com/Link-Z-233/BiliRadio-HM';
   static readonly LINK_BILIMUSIC_REPO: string = 'https://github.com/taotie256/BiliMusic';
   static readonly LINK_PILIPLUS_REPO: string = 'https://github.com/bggRGjQaUbCoE/PiliPlus';
 
-  // —— UI 令牌档位（US2，plan.md R2）：数值不变仅统一来源，观感收敛列远期 ——
+  // —— UI 令牌档位（engineering-refactor US2，plan.md R2）：数值不变仅统一来源，观感收敛列远期 ——
   // 字号：基础档（plan）+ 实测扩展档（数值后缀命名）
   static readonly TOKEN_FONT_CAPTION: number = 10;
   static readonly TOKEN_FONT_AUX: number = 11;
@@ -381,7 +381,7 @@ export class Constants {
   static readonly TOKEN_FONT_24: number = 24;
   static readonly TOKEN_FONT_56: number = 56;
   static readonly TOKEN_ICON_BTN: number = 40;
-  // 详情简介行高（v0.8-part4 US4）：正文多行可读行距，替代 detailSheet 既有裸 24
+  // 详情简介行高（v0.8-p4 US4）：正文多行可读行距，替代 detailSheet 既有裸 24
   static readonly TOKEN_LINE_HEIGHT_DESC: number = 28;
   // 圆角：基础档（plan）+ 实测扩展档
   static readonly TOKEN_RADIUS_S: number = 8;
@@ -408,16 +408,16 @@ export class Constants {
   // 刷新提示行最小高：refreshingContent 自定义区高度随下拉距离自适应，无最小高约束会塌缩
   static readonly TOKEN_REFRESH_HINT_MIN_H: number = 32;
 
-  // —— 订阅导入导出（v0.6-part3 sub-manage）——
+  // —— 订阅导入导出（v0.6-p3）——
   // 导出缓存文件名（cacheDir，每次导出覆盖写）
   static readonly EXPORT_FILE_NAME: string = 'biliradio_subscriptions.json';
-  // UTD 类型串：首选精确 JSON 类型；真机目标应用匹配异常时回退通用文件类型（plan D7）
+  // UTD 类型串：首选精确 JSON 类型；真机目标应用匹配异常时回退通用文件类型（v0.6-p3 plan D7）
   static readonly UTD_GENERAL_JSON: string = 'general.json';
   static readonly UTD_GENERAL_FILE: string = 'general.file';
   // 分享面板记录标题与描述
   static readonly SHARE_SUBS_TITLE: string = 'BiliRadio 订阅列表';
   static readonly SHARE_SUBS_DESCRIPTION: string = 'BiliRadio 订阅备份';
-  // 用户文件 URI 读取分块大小（字节）：statSync 对 user URI 兼容性未验证，分块读不依赖文件大小（plan D8）
+  // 用户文件 URI 读取分块大小（字节）：statSync 对 user URI 兼容性未验证，分块读不依赖文件大小（v0.6-p3 plan D8）
   static readonly URI_READ_CHUNK_BYTES: number = 64 * 1024;
   // 导出/导入 toast 文案
   static readonly TOAST_NO_SUBS_TO_EXPORT: string = '还没有订阅，无需导出';
@@ -425,29 +425,29 @@ export class Constants {
   static readonly TOAST_IMPORT_INVALID_FILE: string = '文件格式不正确，导入已取消';
   // 导入结果 toast（N=新增数 M=跳过数，由实际计数代入）
   static readonly TOAST_IMPORT_RESULT: string = '新增 N 个，跳过 M 个';
-  // 长按行菜单文案（US5 追加）
+  // 长按行菜单文案（v0.6-p3 US5 追加）
   static readonly MENU_SUB_PIN_TO_TOP: string = '置顶';
   static readonly MENU_SUB_REORDER: string = '排序';
   static readonly MENU_SUB_DELETE: string = '删除';
 
-  // —— 长按菜单行强调（v0.6-part3 追加二批 US6）——
+  // —— 长按菜单行强调（v0.6-p3 追加二批 US6）——
   // 长按达成弹菜单时命中行的缩放强调档
   static readonly TOKEN_ROW_MENU_SCALE: number = 0.97;
   // 行缩放强调过渡时长（ms）
   static readonly TOKEN_ROW_MENU_SCALE_ANIM_MS: number = 150;
 
-  // —— 恒挂载拖拽把手（v0.6-part3 追加四批 US8）——
+  // —— 恒挂载拖拽把手（v0.6-p3 追加四批 US8）——
   // 行首把手容器宽度（vp）：原 editRowItem 把手视觉占位收敛（图标 TOKEN_FONT_TITLE_L +
   // 两侧留白 padding XS×2 + margin S），编辑态进出随 animateTo 在 0↔该值间补间、行内容 layoutWeight 让位
   static readonly TOKEN_DRAG_HANDLE_W: number = 38;
-  // 把手手动拖拽换位阈值（vp，US9 FR-026）：行起始间距 = 行高（封面 52 + 上下 padding 10×2）
+  // 把手手动拖拽换位阈值（vp，v0.6-p3 US9 FR-026）：行起始间距 = 行高（封面 52 + 上下 padding 10×2）
   // + List space 8；无 API 实测行高，行高统一前提下取常量
   static readonly TOKEN_DRAG_SWAP_DISTANCE: number = 80;
 
-  // —— fav 批量入队详情补全（v0.7-part4 R2）：并行拉详情的有界并发上限（条），保守初值待真机校准 ——
+  // —— fav 批量入队详情补全（v0.7-p4 R2）：并行拉详情的有界并发上限（条），保守初值待真机校准 ——
   static readonly TOKEN_FAV_ENQUEUE_DETAIL_CONCURRENCY: number = 3;
 
-  // —— 首页订阅行类型色点（v0.7-part5 US6）——
+  // —— 首页订阅行类型色点（v0.7-p5 US6）——
   static readonly SUB_TYPE_DOT_SIZE: number = 8;
 }
 

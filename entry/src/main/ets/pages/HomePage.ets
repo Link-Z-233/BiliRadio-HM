@@ -19,7 +19,7 @@ interface PopupStateChange {
   isVisible: boolean;
 }
 
-// 把手拖拽边缘自动滚动量视口用 id（US4，同 SourcePage SWEEP_LIST_ID 先例）
+// 把手拖拽边缘自动滚动量视口用 id（v0.7-p2 US4，同 SourcePage SWEEP_LIST_ID 先例）
 const DRAG_LIST_ID: string = 'homeSubList';
 
 class SubRow {
@@ -60,7 +60,7 @@ class SubDataSource implements IDataSource {
     }
   }
 
-  // 删除单行（US2）：notifyDataDelete 通知 LazyForEach 走补位动画；越界静默返回
+  // 删除单行（debt-cleanup US2）：notifyDataDelete 通知 LazyForEach 走补位动画；越界静默返回
   delete(index: number): void {
     if (index < 0 || index >= this.rows.length) {
       return;
@@ -71,7 +71,7 @@ class SubDataSource implements IDataSource {
     }
   }
 
-  // 拖拽落子静默重排（US5 FR-014）：LazyForEach.onMove 回调内修改数据源无需 DataChangeListener 通知，
+  // 拖拽落子静默重排（v0.6-p3 US5 FR-014）：LazyForEach.onMove 回调内修改数据源无需 DataChangeListener 通知，
   // 额外 onDataMove 会致框架缓存二次移动（UI 回原序、后续拖拽断裂）；越界静默返回
   silentMove(from: number, to: number): void {
     if (from === to || from < 0 || to < 0 || from >= this.rows.length || to >= this.rows.length) {
@@ -82,7 +82,7 @@ class SubDataSource implements IDataSource {
     this.rows.splice(to, 0, moved);
   }
 
-  // 置顶移动语义（US8 FR-022）：onDataMove 官方为交换语义（swapped），单发 onDataMove(idx, 0) 被框架
+  // 置顶移动语义（v0.6-p3 US8 FR-022）：onDataMove 官方为交换语义（swapped），单发 onDataMove(idx, 0) 被框架
   // 渲染为与首位互换（真机实测脱节根因）；改为 rows 移至 0 + 相邻交换冒泡通知
   // （onDataMove(idx, idx-1)…onDataMove(1, 0)），N-1 步合法交换后框架索引映射与数据排列收敛一致
   // （移动视觉，置顶数量不限）；通知须落在 animateTo 闭包内；拖拽 onMove 落子场景禁用（走 silentMove，FR-014）；
@@ -101,7 +101,7 @@ class SubDataSource implements IDataSource {
     }
   }
 
-  // 把手手动拖拽换位（US9 FR-026）：相邻两元素互换与 onDataMove 官方交换语义（swapped）精确匹配，
+  // 把手手动拖拽换位（v0.6-p3 US9 FR-026）：相邻两元素互换与 onDataMove 官方交换语义（swapped）精确匹配，
   // 单发通知即驱动框架邻居补位动画；非相邻/越界静默返回；通知须落在 animateTo 闭包内
   swapNotify(from: number, to: number): void {
     if (Math.abs(from - to) !== 1 || from < 0 || to < 0 || from >= this.rows.length || to >= this.rows.length) {
@@ -122,35 +122,35 @@ export struct HomePage {
   @Local accentColor: StrState =
     connectStr(Constants.AS_ACCENT_COLOR, Constants.ACCENT_DEFAULT);
   @Local navBarHeight: NumState = connectNum(Constants.AS_NAV_BAR_HEIGHT, 0);
-  // 源页退出（onHidden）经全局键触发重算（US4 返回首页徽标清除）
+  // 源页退出（onHidden）经全局键触发重算（v0-r7 US4 返回首页徽标清除）
   @Local homeRefreshTick: NumState = connectNum(Constants.AS_HOME_REFRESH_TICK, 0);
-  // 系统分享导入传输键（US5）：EntryAbility 取分享原文写入，HomePage 唯一消费方，消费即清
+  // 系统分享导入传输键（v0.7-p2 US5）：EntryAbility 取分享原文写入，HomePage 唯一消费方，消费即清
   @Local shareImportText: StrState = connectStr(Constants.AS_SHARE_IMPORT_TEXT, '');
-  // 分享抽得 B 站链接（US5）：AddSubscriptionSheet initialInput 灌入源，面板关闭即清
+  // 分享抽得 B 站链接（v0.7-p2 US5）：AddSubscriptionSheet initialInput 灌入源，面板关闭即清
   @Local shareSheetInput: string = '';
   @Local rowCount: number = 0;
   @Local showAddSheet: boolean = false;
   @Local pressedKey: string = '';
-  // 订阅排序编辑态（v0.6-part3 US1）：整页进入拖拽调序，「完成」/系统返回退出
+  // 订阅排序编辑态（v0.6-p3 US1）：整页进入拖拽调序，「完成」/系统返回退出
   @Local editMode: boolean = false;
-  // 长按行菜单显隐键（US5）：当前弹菜单行的 sub.id，空串表示无菜单
+  // 长按行菜单显隐键（v0.6-p3 US5）：当前弹菜单行的 sub.id，空串表示无菜单
   @Local menuKey: string = '';
-  // 把手手动拖拽态（US9 FR-026）：draggingKey 被拖行 sub.id（空串无拖拽）、dragOffsetY/dragBaseline
-  // 为 translate 绑定所需响应式量（offsetY-换位判定位移＝手指累积纵偏移＋拖拽期间滚动增量（US4 边缘滚动
+  // 把手手动拖拽态（v0.6-p3 US9 FR-026）：draggingKey 被拖行 sub.id（空串无拖拽）、dragOffsetY/dragBaseline
+  // 为 translate 绑定所需响应式量（offsetY-换位判定位移＝手指累积纵偏移＋拖拽期间滚动增量（v0.7-p2 US4 边缘滚动
   // 并入，被拖行 translate 锁手指）、baseline-当前槽位偏移基准，swap 换位随方向累进阈值，两者差即被拖行位移）
   @Local draggingKey: string = '';
   @Local dragOffsetY: number = 0;
   @Local dragBaseline: number = 0;
-  // 置顶飞越（US7）：被置顶行 sub.id，飞行期间 zIndex 抬升盖过其他行，动画结束复位
+  // 置顶飞越（v0.7-p1 US7）：被置顶行 sub.id，飞行期间 zIndex 抬升盖过其他行，动画结束复位
   @Local flightKey: string = '';
   private dragActive: boolean = false;
   private dragFromIndex: number = -1;
-  // 手指累积纵偏移（GestureEvent.offsetY）与起拖 yOffset 快照（US4）：换位判定位移 = 手指偏移 +（当前 yOffset − 快照）
+  // 手指累积纵偏移（GestureEvent.offsetY）与起拖 yOffset 快照（v0.7-p2 US4）：换位判定位移 = 手指偏移 +（当前 yOffset − 快照）
   private dragFingerY: number = 0;
   private dragStartYOffset: number = 0;
-  // 把手拖拽边缘自动滚动器（US4，SelectLogic 原样复用）
+  // 把手拖拽边缘自动滚动器（v0.7-p2 US4，SelectLogic 原样复用）
   private edgeScroller: EdgeAutoScroller = new EdgeAutoScroller();
-  // 编辑态挂起的 rebuild 标记（US1）：编辑期间 rebuild 置脏，退出编辑态后补跑一次
+  // 编辑态挂起的 rebuild 标记（v0.6-p3 US1）：编辑期间 rebuild 置脏，退出编辑态后补跑一次
   private rebuildPending: boolean = false;
   // 添加订阅面板的系统返回拦截句柄（onWillDismiss PRESS_BACK 时经其询问面板是否消费）
   private addSheetBack: AddSheetBackHandler = new AddSheetBackHandler();
@@ -167,9 +167,9 @@ export struct HomePage {
     this.subs = SubscriptionStore.loadSubscriptions();
     this.rebuild();
     this.silentRefresh(Constants.HOME_COLD_START_REFRESH_CD_MS);
-    // 分享导入兜底读（US5）：冷启动 EntryAbility 写键早于页面挂载，@Monitor 未覆盖的写入在此消费
+    // 分享导入兜底读（v0.7-p2 US5）：冷启动 EntryAbility 写键早于页面挂载，@Monitor 未覆盖的写入在此消费
     this.consumeShareImport();
-    // 编辑态系统返回消费句柄（US1）：句柄内自判编辑态，非编辑态返回 false 放行后续层
+    // 编辑态系统返回消费句柄（v0.6-p3 US1）：句柄内自判编辑态，非编辑态返回 false 放行后续层
     registerHomeEditBack((): boolean => {
       if (this.editMode) {
         this.exitEditMode();
@@ -205,8 +205,8 @@ export struct HomePage {
     this.provider.reload(rows);
   }
 
-  // US4：源页退出经全局键触发（onPop 对无参 pop() 永不回调，见 SourcePage.onHidden 注释）；
-  // US1：Index.onPageShow 回前台、⑭：SettingsPage.aboutToDisappear 设置层关闭同键触发，重算外补调静默刷新；
+  // v0-r7 US4：源页退出经全局键触发（onPop 对无参 pop() 永不回调，见 SourcePage.onHidden 注释）；
+  // v0.7-p2 US1：Index.onPageShow 回前台、v0.5-p4 ⑭：SettingsPage.aboutToDisappear 设置层关闭同键触发，重算外补调静默刷新；
   // CD 分层（⑭）：本链（回前台/源页退出/设置层关闭）1 小时，冷启动 aboutToAppear 直调 15 分钟
   @Monitor('homeRefreshTick.value')
   onHomeRefreshTick(): void {
@@ -214,13 +214,13 @@ export struct HomePage {
     this.silentRefresh(Constants.HOME_FOREGROUND_REFRESH_CD_MS);
   }
 
-  // 系统分享导入（US5）：热启动写键经此触发，镜像 homeRefreshTick 监听模式
+  // 系统分享导入（v0.7-p2 US5）：热启动写键经此触发，镜像 homeRefreshTick 监听模式
   @Monitor('shareImportText.value')
   onShareImportText(): void {
     this.consumeShareImport();
   }
 
-  // 分享导入消费门控（US5）：拷贝后清键（面板已开再分享可二次触发）；抽不到 B 站链接 toast 拒收；
+  // 分享导入消费门控（v0.7-p2 US5）：拷贝后清键（面板已开再分享可二次触发）；抽不到 B 站链接 toast 拒收；
   // 抽到 → 路由（视频类直接入队不开面板消闪，出错回退开面板走面板链）
   private consumeShareImport(): void {
     const raw: string = this.shareImportText.value;
@@ -235,7 +235,7 @@ export struct HomePage {
     this.routeShareImport(extractBiliUrl(raw));
   }
 
-  // 分享路由（US5 消闪）：短链先解析（失败回退开面板由面板链给既有分型提示）；
+  // 分享路由（v0.7-p2 US5 消闪）：短链先解析（失败回退开面板由面板链给既有分型提示）；
   // 识别为视频（bv/av）→ 直接入队播放；其余（订阅类/ep/无法识别）开面板走既有检索链
   private routeShareImport(cleaned: string): void {
     const normalized: string = normalizeShortLinkUrl(cleaned);
@@ -254,7 +254,7 @@ export struct HomePage {
     });
   }
 
-  // 分享目标分发（US5 消闪）：bv 直接入队；av 经 aid 归一化（查询失败回退开面板）；
+  // 分享目标分发（v0.7-p2 US5 消闪）：bv 直接入队；av 经 aid 归一化（查询失败回退开面板）；
   // 其余类型开面板（面板内 up/fav/season/series/lists 订阅流程、ep 拒收、识别失败提示均为既有链）
   private dispatchShareTarget(target: string, fallback: string): void {
     const parsed: RecognizeResult = recognizeInput(target);
@@ -282,7 +282,7 @@ export struct HomePage {
     this.openShareSheet(fallback);
   }
 
-  // 分享视频直接入队（US5 消闪）：成功（APPENDED/STARTED/DUPLICATE）仅 toast 不开面板；
+  // 分享视频直接入队（v0.7-p2 US5 消闪）：成功（APPENDED/STARTED/DUPLICATE）仅 toast 不开面板；
   // FAILED/异常回退开面板（面板自动重试走既有 playBv 链给失败 toast）
   private enqueueSharedVideo(bvid: string, page: number, fallback: string): void {
     PlayerController.getInstance().addSingleVideo(bvid, page).then((result: EnqueueResult): void => {
@@ -313,11 +313,11 @@ export struct HomePage {
     // CD 门读 AppStore，须等 preferences 就绪（aboutToAppear 早于 PlayerController.init 的异步完成）
     await AppStore.init();
     const elapsed: number = Date.now() - AppStore.getNumber(Constants.KEY_LAST_SILENT_REFRESH_AT, 0);
-    // D9：时钟回拨（elapsed 为负）视为 CD 过期放行
+    // v0.5-p4 D9：时钟回拨（elapsed 为负）视为 CD 过期放行
     if (elapsed >= 0 && elapsed < cdMs) {
       return;
     }
-    // 过 CD 门才有对比窗（US2）：发起刷新前快照全源新集总数，直读 SubscriptionStore 不经行缓存
+    // 过 CD 门才有对比窗（v0.7-p2 US2）：发起刷新前快照全源新集总数，直读 SubscriptionStore 不经行缓存
     const newCountBefore: number = this.totalNewCount();
     this.refreshingNow = true;
     let failCount: number = 0;
@@ -333,7 +333,7 @@ export struct HomePage {
     });
   }
 
-  // 全源新集总数（US2）：Σ countNew(loadEpisodes, lastSeenAt)，直读 SubscriptionStore
+  // 全源新集总数（v0.7-p2 US2）：Σ countNew(loadEpisodes, lastSeenAt)，直读 SubscriptionStore
   private totalNewCount(): number {
     const subs: Subscription[] = SubscriptionStore.loadSubscriptions();
     let total: number = 0;
@@ -343,8 +343,8 @@ export struct HomePage {
     return total;
   }
 
-  // 静默刷新收尾（v0.5-part4 US3）：写 CD 时间戳 + 失败源聚合 toast（去重窗内只弹一次；CD 跳过路径零提示）；
-  // 新集正向增量 toast（US2）：重算总数仅认增量 N>0，与失败 toast 按各自语义并存
+  // 静默刷新收尾（v0.5-p4 US3）：写 CD 时间戳 + 失败源聚合 toast（去重窗内只弹一次；CD 跳过路径零提示）；
+  // 新集正向增量 toast（v0.7-p2 US2）：重算总数仅认增量 N>0，与失败 toast 按各自语义并存
   private finishSilentRefresh(failCount: number, newCountBefore: number): void {
     this.refreshingNow = false;
     AppStore.putNumber(Constants.KEY_LAST_SILENT_REFRESH_AT, Date.now());
@@ -365,7 +365,7 @@ export struct HomePage {
     }
   }
 
-  // 进出编辑态统一 animateTo 驱动（US7 FR-021）：与源详情页多选进出同构
+  // 进出编辑态统一 animateTo 驱动（v0.6-p3 US7 FR-021）：与源详情页多选进出同构
   // （TOKEN_SELECT_ANIM_MS + EaseOut，transition 不带自带 animation 参数、参数由 animateTo 供给）
   private enterEditMode(): void {
     this.getUIContext().animateTo({ duration: Constants.TOKEN_SELECT_ANIM_MS, curve: Curve.EaseOut }, (): void => {
@@ -373,7 +373,7 @@ export struct HomePage {
     });
   }
 
-  // 统一退出（US1）：「完成」按钮与系统返回共用；挂起的 rebuild 补跑置于 animateTo 闭包外
+  // 统一退出（v0.6-p3 US1）：「完成」按钮与系统返回共用；挂起的 rebuild 补跑置于 animateTo 闭包外
   // （reload 不打断旧分支节点的消失动画）；把手手动拖拽态随编辑态退出中止清零（FR-026）
   private exitEditMode(): void {
     if (!this.editMode) {
@@ -394,7 +394,7 @@ export struct HomePage {
     }
   }
 
-  // 拖拽落子（US5 FR-014 / US8 FR-023）：编辑态闸（onMove 恒绑单 List，非编辑态落子不改序不落盘，
+  // 拖拽落子（v0.6-p3 US5 FR-014 / US8 FR-023）：编辑态闸（onMove 恒绑单 List，非编辑态落子不改序不落盘，
   // 拖动视觉回弹为已接受风险）；把手手动拖拽进行中系统落子拒收（FR-026 双路径互斥闸）；
   // subs 重排 → sortOrder 全量归一化 0..n-1 → 落盘 → provider 静默同步
   // （onMove 回调内修改数据源无需通知 listener，该路径禁调 onDataMove）
@@ -415,7 +415,7 @@ export struct HomePage {
     this.provider.silentMove(from, to);
   }
 
-  // 把手拖拽换位（US9 FR-026）：累积偏移每跨 TOKEN_DRAG_SWAP_DISTANCE 与目标方向相邻行交换
+  // 把手拖拽换位（v0.6-p3 US9 FR-026）：累积偏移每跨 TOKEN_DRAG_SWAP_DISTANCE 与目标方向相邻行交换
   // （subs splice 互换 + provider.swapNotify 单发 onDataMove，包 animateTo 驱动邻居补位），
   // dragBaseline 随交换按方向累进（translate 相对量归零基准随槽位走）；循环守卫 10 次兜底异常位移
   private processDragSwap(currentOffset: number): void {
@@ -444,12 +444,12 @@ export struct HomePage {
     }
   }
 
-  // 换位判定位移（US4）：手指累积纵偏移 +（当前 yOffset − 起拖快照），纯手指移动与纯边缘滚动同套基准
+  // 换位判定位移（v0.7-p2 US4）：手指累积纵偏移 +（当前 yOffset − 起拖快照），纯手指移动与纯边缘滚动同套基准
   private dragSwapOffset(): number {
     return this.dragFingerY + (this.scroller.currentOffset().yOffset - this.dragStartYOffset);
   }
 
-  // 把手拖拽边缘带检查（US4，SourcePage 边缘带模式同构）：globalY 进顶部/底部带起滚、出带停滚
+  // 把手拖拽边缘带检查（v0.7-p2 US4，SourcePage 边缘带模式同构）：globalY 进顶部/底部带起滚、出带停滚
   private checkDragEdge(globalY: number): void {
     const rect: componentUtils.ComponentInfo =
       this.getUIContext().getComponentUtils().getRectangleById(DRAG_LIST_ID);
@@ -464,7 +464,7 @@ export struct HomePage {
     }
   }
 
-  // 尽头停滚（US4）：向下 isAtEnd、向上回顶
+  // 尽头停滚（v0.7-p2 US4）：向下 isAtEnd、向上回顶
   private dragEdgeAtEnd(downward: boolean): boolean {
     if (downward) {
       return this.scroller.isAtEnd();
@@ -479,7 +479,7 @@ export struct HomePage {
     }, (down: boolean): boolean => this.dragEdgeAtEnd(down));
   }
 
-  // 把手拖拽松手归位（US9 FR-026）：animateTo 内 dragOffsetY→dragBaseline（相对位移归零平滑落槽），
+  // 把手拖拽松手归位（v0.6-p3 US9 FR-026）：animateTo 内 dragOffsetY→dragBaseline（相对位移归零平滑落槽），
   // onFinish 经 dragActive 守卫清态（落槽动画窗口内重启拖拽不误清）；sortOrder 归一化 + 落盘
   private settleDrag(): void {
     if (this.draggingKey === '') {
@@ -505,9 +505,9 @@ export struct HomePage {
     SubscriptionStore.saveSubscriptions(this.subs);
   }
 
-  // 置顶（US5 FR-013 / US8 FR-022）：移除该 sub → unshift 首位 → sortOrder 全量归一化 → 落盘 →
+  // 置顶（v0.6-p3 US5 FR-013 / US8 FR-022）：移除该 sub → unshift 首位 → sortOrder 全量归一化 → 落盘 →
   // animateTo 内 provider.moveToFront（相邻交换冒泡 onDataMove）驱动行移动补位动画；已在首位幂等无变化；
-  // 被置顶行飞行期间 zIndex 抬升盖过其他行（US7 飞越），onFinish 复位；
+  // 被置顶行飞行期间 zIndex 抬升盖过其他行（v0.7-p1 US7 飞越），onFinish 复位；
   // 不 rebuild（reload 全量重建会打断移动动画）
   private pinToTop(row: SubRow): void {
     const subId: string = row.sub.id;
@@ -540,7 +540,7 @@ export struct HomePage {
     });
   }
 
-  // 删除订阅（US2 健壮化）：按 sub.id 定位（替代引用匹配，消除闭包陈旧引用静默早退），
+  // 删除订阅（debt-cleanup US2 健壮化）：按 sub.id 定位（替代引用匹配，消除闭包陈旧引用静默早退），
   // animateTo 闭包内经 provider.delete 补位动画，闭包内不 rebuild；保存后校验持久化结果
   private removeSub(row: SubRow): void {
     const subId: string = row.sub.id;
@@ -633,7 +633,7 @@ export struct HomePage {
     })
   }
 
-  // 订阅类型色点（US6）：按源类型映射四色（UP=蓝/收藏夹=黄/合集=紫/系列=绿）
+  // 订阅类型色点（v0.7-p5 US6）：按源类型映射四色（UP=蓝/收藏夹=黄/合集=紫/系列=绿）
   private subTypeDotColor(type: string): Resource {
     if (type === Subscription.TYPE_FAV) {
       return $r('app.color.sub_type_fav');
@@ -647,7 +647,7 @@ export struct HomePage {
     return $r('app.color.sub_type_up');
   }
 
-  // 行内容内核（v0.6-part3 US1）：封面 + 文字列 + 新集徽标，layoutWeight(1) 给行首恒挂载把手真实让位
+  // 行内容内核（v0.6-p3 US1）：封面 + 文字列 + 新集徽标，layoutWeight(1) 给行首恒挂载把手真实让位
   @Builder
   private subRowCore(row: SubRow) {
     Row() {
@@ -656,7 +656,7 @@ export struct HomePage {
         Row({ space: Constants.TOKEN_SPACE_XS }) {
           Circle({ width: Constants.SUB_TYPE_DOT_SIZE, height: Constants.SUB_TYPE_DOT_SIZE })
             .fill(this.subTypeDotColor(row.sub.type))
-          // 订阅列表条目剥「合集·」前缀（US4 FR-011 展示层，与详情页/导航标题同源）
+          // 订阅列表条目剥「合集·」前缀（v0.5-p3 US4 FR-011 展示层，与详情页/导航标题同源）
           Text(row.sub.displayTitle())
             .fontSize(Constants.TOKEN_FONT_TITLE)
             .fontWeight(FontWeight.Medium)
@@ -690,7 +690,7 @@ export struct HomePage {
     .layoutWeight(1)
   }
 
-  // 长按行菜单（US5 FR-012）：置顶/排序/删除三项，菜单项点击后置 menuKey 关菜单
+  // 长按行菜单（v0.6-p3 US5 FR-012）：置顶/排序/删除三项，菜单项点击后置 menuKey 关菜单
   @Builder
   private subRowMenuBuilder(row: SubRow) {
     Menu() {
@@ -715,7 +715,7 @@ export struct HomePage {
   @Builder
   private subRowItem(row: SubRow) {
     Row() {
-      // 恒挂载拖拽把手（US8 FR-023，SelectCheckbox 同构）：宽度 0↔把手宽 + 透明度 0↔1 随 editMode
+      // 恒挂载拖拽把手（v0.6-p3 US8 FR-023，SelectCheckbox 同构）：宽度 0↔把手宽 + 透明度 0↔1 随 editMode
       // 联动（动画由 enter/exitEditMode 既有 animateTo 驱动状态翻转，此处只做属性绑定）；
       // ArkUI width 是内容宽、padding 在外另加（bugfix 1）：正常态 width 0 + padding 12 实占 12vp 残带
       // （仅 pan 认领、长按漏给 List 系统拖拽），padding 须随 width 条件归零才是真零宽；
@@ -787,7 +787,7 @@ export struct HomePage {
             })
         )
       )
-      // 内容包装（US9 FR-026）：layoutWeight 让位 + 编辑态禁行级交互（触摸穿透保系统拖拽/按压链，
+      // 内容包装（v0.6-p3 US9 FR-026）：layoutWeight 让位 + 编辑态禁行级交互（触摸穿透保系统拖拽/按压链，
       // FR-024 三版语义随迁），正常态交互（onClick 闸/长按菜单/bindMenu）全部承载于此；
       // 行 padding 落此不落根 Row（bugfix 1）：正常态包装盒覆盖整卡，长按手势全域认领——
       // padding 带留在无手势的根节点时 List 恒绑 onMove 的内建长按在未认领区胜出，
@@ -799,13 +799,13 @@ export struct HomePage {
       .enabled(!this.editMode)
       .padding({ left: Constants.TOKEN_SPACE_M, right: Constants.TOKEN_SPACE_M, top: Constants.TOKEN_SPACE_10, bottom: Constants.TOKEN_SPACE_10 })
       .onClick(() => {
-        // menuKey 先置位拦截长按弹菜单尾随 Up 误触导航（D22 二版补丁，随三版回退保留无害）；编辑态早退兜底
+          // menuKey 先置位拦截长按弹菜单尾随 Up 误触导航（v0.6-p3 D22 二版补丁，随三版回退保留无害）；编辑态早退兜底
         if (this.editMode || this.menuKey !== '') {
           return;
         }
         this.navPathStack.pushPathByName('sourcePage', row.sub.id);
       })
-      // 长按达成即弹行菜单（US6 FR-016）：按压中触发（文件管理风格，不待抬手），行同步缩放强调；编辑态不弹菜单（editMode 闸）
+      // 长按达成即弹行菜单（v0.6-p3 US6 FR-016）：按压中触发（文件管理风格，不待抬手），行同步缩放强调；编辑态不弹菜单（editMode 闸）
       .gesture(
         LongPressGesture()
           .onAction((): void => {
@@ -815,7 +815,7 @@ export struct HomePage {
             this.menuKey = row.sub.id;
           })
       )
-      // 受控菜单（isShow 按行 id 单行显隐）；从行上方展开（FR-019）；onDisappear 复位防点外关闭后状态残留
+      // 受控菜单（isShow 按行 id 单行显隐）；从行上方展开（v0.6-p3 FR-019）；onDisappear 复位防点外关闭后状态残留
       .bindMenu(this.menuKey === row.sub.id, this.subRowMenuBuilder(row), {
         placement: Placement.Top,
         onDisappear: (): void => {
@@ -826,7 +826,7 @@ export struct HomePage {
     .width('100%')
     .borderRadius(Constants.TOKEN_RADIUS_14)
     .backgroundColor(this.pressedKey === row.sub.id ? $r('app.color.item_pressed_background') : $r('app.color.card_background'))
-    // 长按弹菜单时命中行缩放强调（US6 FR-016），菜单关闭恢复 1 经同一属性动画平滑过渡
+    // 长按弹菜单时命中行缩放强调（v0.6-p3 US6 FR-016），菜单关闭恢复 1 经同一属性动画平滑过渡
     .scale({
       x: this.menuKey === row.sub.id ? Constants.TOKEN_ROW_MENU_SCALE : 1,
       y: this.menuKey === row.sub.id ? Constants.TOKEN_ROW_MENU_SCALE : 1
@@ -901,7 +901,7 @@ export struct HomePage {
         }
         Blank()
         if (this.editMode) {
-          // 「完成」退出编辑态（US1）：替换「＋/⋯」区
+          // 「完成」退出编辑态（v0.6-p3 US1）：替换「＋/⋯」区
           Row() {
             SymbolGlyph($r('sys.symbol.checkmark'))
               .fontSize(Constants.TOKEN_FONT_TITLE_L)
@@ -943,7 +943,7 @@ export struct HomePage {
           .justifyContent(FlexAlign.Center)
           .margin({ left: Constants.TOKEN_SPACE_S })
           .onClick(() => {
-            // 更多按钮直达设置层（US4）：播放历史/关于本就是设置页内入口，独立更多页已删除
+            // 更多按钮直达设置层（v0-r3 US4）：播放历史/关于本就是设置页内入口，独立更多页已删除
             connectBool(Constants.AS_SHOW_SETTINGS_PAGE, false).value = true;
           })
           .transition(TransitionEffect.OPACITY)
@@ -955,7 +955,7 @@ export struct HomePage {
       if (this.rowCount === 0) {
         this.emptyView()
       } else {
-        // 单 List 恒绑 onMove（US8 FR-023）：行节点恒存续是行首把手宽度补间（恒挂载让位）的前提，
+        // 单 List 恒绑 onMove（v0.6-p3 US8 FR-023）：行节点恒存续是行首把手宽度补间（恒挂载让位）的前提，
         // 双 List 分支替换会销毁重建行节点致补间无从发生；非编辑态落子由 applyDragOrder 编辑态闸拒绝
         Stack() {
           List({ space: Constants.TOKEN_SPACE_S, scroller: this.scroller }) {
@@ -973,7 +973,7 @@ export struct HomePage {
                      }
                    }
                  })
-                // 按压链恒挂 ListItem（FR-024 三版）：编辑态行 enabled(false) 触摸穿透至此保按压反馈，
+                // 按压链恒挂 ListItem（v0.6-p3 FR-024 三版）：编辑态行 enabled(false) 触摸穿透至此保按压反馈，
                 // onTouch 纯监听不参与手势仲裁不阻塞系统拖拽；正常态触摸命中行冒泡至此不断；收不到穿透触摸则回退一版（放弃编辑态按压反馈）
                 .onTouch((e: TouchEvent): void => {
                   if (e.type === TouchType.Down) {
@@ -982,7 +982,7 @@ export struct HomePage {
                     this.pressedKey = '';
                   }
                 })
-                // 把手手动拖拽位移（US9 FR-026）：挂 ListItem 而非根 Row——根 Row 的 .animation()
+                // 把手手动拖拽位移（v0.6-p3 US9 FR-026）：挂 ListItem 而非根 Row——根 Row 的 .animation()
                 // 会给 translate 平滑滞后（拖拽跟手变橡皮筋）；zIndex 抬升被拖行盖过邻行
                 .translate({ y: this.draggingKey === row.sub.id ? this.dragOffsetY - this.dragBaseline : 0 })
                 .zIndex(this.draggingKey === row.sub.id || this.flightKey === row.sub.id ? 1 : 0)
@@ -995,12 +995,12 @@ export struct HomePage {
           .height('100%')
           .id(DRAG_LIST_ID)
           .padding({ left: Constants.TOKEN_SPACE_M, right: Constants.TOKEN_SPACE_M, top: Constants.TOKEN_SPACE_XS })
-          // US9：内容不足一屏时 List 默认不开启边缘效果，须显式 alwaysEnabled 才有过冲物理回弹
+          // v0.6-p3 US9：内容不足一屏时 List 默认不开启边缘效果，须显式 alwaysEnabled 才有过冲物理回弹
           .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         }
         .width('100%')
         .layoutWeight(1)
-        // 列表底缘永久让位 MiniPlayer（US3，原 FR-015 下穿过设计废止）：视口底缘收至胶囊上方（两态恒生效），
+        // 列表底缘永久让位 MiniPlayer（v0.7-p2 US3，原 v0.5-p2-1 FR-015 下穿过设计废止）：视口底缘收至胶囊上方（两态恒生效），
         // 内建拖拽底部触发区随视口上提；同值同式迁移自原 contentEndOffset，滚到底最后一条静止位零跳变
         .padding({ bottom: Constants.MINI_PLAYER_CLEARANCE + this.navBarHeight.value })
       }
@@ -1013,7 +1013,7 @@ export struct HomePage {
       preferType: SheetType.BOTTOM,
       onDisappear: (): void => {
         this.showAddSheet = false;
-        // 清分享灌入值（US5）：下次「＋」打开面板回到空输入，不重放旧分享检索
+        // 清分享灌入值（v0.7-p2 US5）：下次「＋」打开面板回到空输入，不重放旧分享检索
         this.shareSheetInput = '';
       },
       onWillDismiss: (dismiss: DismissSheetAction) => {

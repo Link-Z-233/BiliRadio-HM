@@ -93,7 +93,7 @@ struct Index {
         });
       });
     };
-    // 播放出错提醒（v0.5-part3 US6）：emitUi 广播内比对 errorTick 版本计数，变化即弹系统 toast；
+    // 播放出错提醒（v0.5-p3 US6）：emitUi 广播内比对 errorTick 版本计数，变化即弹系统 toast；
     // 须在 init() 前订阅，冷启动自动续播（init 内起播路径）的早期错误不漏；
     // emitUi 每秒进度节流也会进此回调，tick 比对恒假零开销
     this.lastErrorTick = controller.errorTick;
@@ -114,7 +114,7 @@ struct Index {
       }
     }, 'Index');
     controller.init().then((): void => {
-      // debug 恢复前移冷启动（v0.4-Part1-ux-fixes US10）：AppStore 就绪后恢复 Logger 并提醒，
+      // debug 恢复前移冷启动（v0.4-p1-2 US10）：AppStore 就绪后恢复 Logger 并提醒，
       // 修复「不进设置页 debug 不生效」；开启时冷启动 toast 一次
       const storedDebug: boolean = AppStore.getNumber(Constants.KEY_DEBUG_MODE, 0) === 1;
       Logger.setDebugMode(storedDebug);
@@ -158,7 +158,7 @@ struct Index {
     return dismissOverlaysForBack();
   }
 
-  // 回前台触发首页重算+静默刷新尝试（US1）：页面级生命周期是回前台唯一挂点（子组件无此生命周期），
+  // 回前台触发首页重算+静默刷新尝试（v0.7-p2 US1）：页面级生命周期是回前台唯一挂点（子组件无此生命周期），
   // bump 既有全局键经 HomePage @Monitor 驱动，三层门（CD/TTL/防重入）收敛多触发点
   onPageShow(): void {
     connectNum(Constants.AS_HOME_REFRESH_TICK, 0).value = Date.now();
@@ -218,10 +218,9 @@ struct Index {
           .animation({ duration: Constants.PAGE_LAYER_SLIDE_MS, curve: Curve.Friction }))
       }
 
-      // 全屏播放层（KI-5 方案B）：API 24 上 bindContentCover(ModalPage) 挂载后渲染管线即断开
-      // （仅渲染首帧、组件伪 aboutToDisappear 同步出现，全量刷机后依旧），改用树内条件渲染承载，
-      // 生命周期与渲染管线回归常规路径；expandSafeArea 延伸系统栏区域复现 ModalPage 全窗口视觉，
-      // 底部滑入/滑出转场近似原 ModalTransition.DEFAULT 手感
+      // 全屏播放层（L3，v0.4-p2 方案B）：树内条件渲染承载，不用 bindContentCover
+      // （KI-5：ModalPage 渲染管线断裂，已弃用）；expandSafeArea 延伸系统栏复现全窗口视觉，
+      // 底部滑入/滑出转场
       if (this.showPlayerOverlay.value) {
         PlayerOverlay()
           .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])

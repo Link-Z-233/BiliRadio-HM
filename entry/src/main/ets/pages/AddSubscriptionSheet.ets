@@ -58,7 +58,7 @@ export struct AddSubscriptionSheet {
   };
   // 系统返回拦截句柄（由宿主 HomePage 持有并传入，onWillDismiss PRESS_BACK 时调用）
   @Param backHandler: AddSheetBackHandler = new AddSheetBackHandler();
-  // 分享导入灌入值（US5）：非空即灌入 mainInput 并自动执行一次检索；面板已开再分享经 @Monitor 更新重检索
+  // 分享导入灌入值（v0.7-p2 US5）：非空即灌入 mainInput 并自动执行一次检索；面板已开再分享经 @Monitor 更新重检索
   @Param initialInput: string = '';
   private controller: PlayerController = PlayerController.getInstance();
 
@@ -151,13 +151,13 @@ export struct AddSubscriptionSheet {
   }
 
   private handleMainInput(): void {
-    // US5：提交查询统一收起软键盘（覆盖按钮点击/输入法提交/非法输入全部分支）
+    // v0-r4 US5：提交查询统一收起软键盘（覆盖按钮点击/输入法提交/非法输入全部分支）
     try {
       inputMethod.getController().stopInputSession();
     } catch (e) {
       // 收起失败静默：不影响查询主流程
     }
-    // KI-4：全分支统一前置清洗——从分享文案抽取第一个 B 站链接（含尾随标点清除），未抽到回退 trim 原文
+    // bili-link-recognize KI-4：全分支统一前置清洗——从分享文案抽取第一个 B 站链接（含尾随标点清除），未抽到回退 trim 原文
     const cleaned: string = extractBiliUrl(this.mainInput);
     const normalized: string = normalizeShortLinkUrl(cleaned);
     if (isBiliShortLink(normalized)) {
@@ -170,11 +170,11 @@ export struct AddSubscriptionSheet {
         this.mainBusy = false;
         this.mainMsg = '';
         if (res.outcome !== ShortLinkOutcome.OK) {
-          // 失败分型提示：网络失败 / 超出跳数 / 无有效目标 / 目标无法识别（FR-005）
+          // 失败分型提示：网络失败 / 超出跳数 / 无有效目标 / 目标无法识别（bili-link-recognize FR-005）
           this.getUIContext().getPromptAction().showToast({ message: res.message });
           return;
         }
-        // 解析成功不回写输入框（FR-010），识别目标后走既有分发
+        // 解析成功不回写输入框（bili-link-recognize FR-010），识别目标后走既有分发
         const parsed: RecognizeResult = recognizeInput(res.target);
         if (parsed.type === '') {
           this.getUIContext().getPromptAction().showToast({ message: '短链目标无法识别' });
@@ -401,7 +401,7 @@ export struct AddSubscriptionSheet {
     });
   }
 
-  // lists 回退链第二步（KI-7 B3 修复）：系列 meta 经 mid 锚点校验 → 订阅；失败/UP 不匹配报「合集/系列信息获取失败」
+  // lists 回退链第二步（v0.6-p4 KI-7 B3 修复）：系列 meta 经 mid 锚点校验 → 订阅；失败/UP 不匹配报「合集/系列信息获取失败」
   private subscribeSeriesFallback(id: number, anchorMid: number): void {
     BiliService.fetchSeriesMeta(id).then((meta: SeasonMeta): void => {
       this.mainBusy = false;
@@ -422,10 +422,10 @@ export struct AddSubscriptionSheet {
     });
   }
 
-  // lists 无 type 参数回退链（KI-7 B3 修复）：合集与系列共用 id 数字空间、存在撞号（真机实测
-  // 系列 302414 同号命中别 UP 的真实合集），以 URL 自带 {mid}（资源所属 UP）为锚点消歧：
+  // lists 无 type 参数回退链（v0.6-p4 KI-7 B3 修复）：合集与系列共用 id 数字空间、存在跨 UP 撞号
+  // （实测见 BILI_NOTES §3.10），以 URL 自带 {mid}（资源所属 UP）为锚点消歧：
   // season meta.mid 与锚点匹配才订合集，否则转系列，双失败明确报错；无锚点时以 meta.mid>0
-  // 识别空 meta 桩（BILI_NOTES §3.10）。ponytail: 同 UP 撞号不可消歧, 按合集命中
+  // 识别空 meta 桩。ponytail: 同 UP 撞号不可消歧, 按合集命中
   private subscribeListsById(idStr: string, ownerMidStr: string): void {
     const id: number = parseInt(idStr, 10);
     const anchorMid: number = parseInt(ownerMidStr, 10);
@@ -749,7 +749,7 @@ export struct AddSubscriptionSheet {
           // 合集封面 URL 拼缩略后缀会 404，raw=true 直接加载原图
           CoverThumb({ cover: s.cover, thumbSize: 40, radius: 8, raw: true })
           Column() {
-            // 合集条目标题剥「合集·」前缀（US4 FR-011 展示层，订阅后 toast/详情页同源）
+            // 合集条目标题剥「合集·」前缀（v0.5-p3 US4 FR-011 展示层，订阅后 toast/详情页同源）
             Text(Subscription.stripSeasonPrefix(s.title))
               .fontSize(Constants.TOKEN_FONT_BODY_M)
               .fontColor($r('app.color.text_primary'))

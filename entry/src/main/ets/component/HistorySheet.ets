@@ -10,13 +10,13 @@ import { SelectCheckbox } from './SelectCheckbox';
 import { componentUtils } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 
-// 拖选等高步长（FR-014）：归并行固定 44 高 + 上下 padding TOKEN_SPACE_10（List space 0），
+// 拖选等高步长（v0.5-p2-1 FR-014）：归并行固定 44 高 + 上下 padding TOKEN_SPACE_10（List space 0），
 // 沿 QueueSheet EST_* 文件级常量先例
 const HISTORY_SWEEP_STEP: number = Constants.LIST_THUMB_SIZE + 2 * Constants.TOKEN_SPACE_10;
 // 拖选边缘带定位用 List 组件 id（checkSweepEdge 与 .id() 同源）
 const SWEEP_LIST_ID: string = 'historySheetList';
 
-// 历史归并行（US6 纯展示层派生视图，不落盘）：bvid 聚合为一行，
+// 历史归并行（fix-multi-part US6 纯展示层派生视图，不落盘）：bvid 聚合为一行，
 // latest = 该视频 viewAt 最新的分P 历史（行状态源，点行续播目标）
 class HistoryRow {
   bvid: string = '';
@@ -57,7 +57,7 @@ class HistoryDataSource implements IDataSource {
     }
   }
 
-  // 归并行删除通知（US3 FR-009）：LazyForEach 增量删除指定下标；
+  // 归并行删除通知（play-history-progress US3 FR-009）：LazyForEach 增量删除指定下标；
   // 按 DataChangeListener 契约，先从自身数据删除对应下标再通知监听者
   notifyDataDelete(index: number): void {
     if (index < 0 || index >= this.rows.length) {
@@ -70,7 +70,7 @@ class HistoryDataSource implements IDataSource {
   }
 }
 
-// 播放历史面板（Index L4 独立层，GlassSheet 承载）：US6 按视频归并——一视频一行（主行 videoTitle，
+// 播放历史面板（Index L4 独立层，GlassSheet 承载）：fix-multi-part US6 按视频归并——一视频一行（主行 videoTitle，
 // 副行「相对时间 · 看到Pn · 剩余/已听完」），点行续播最新分P，多选/左滑删除均 bvid 级；
 // 点击仅起播不收面板，清空需二次确认；背景由容器提供（sheet_panel_background），关闭经容器动画滑出
 @ComponentV2
@@ -82,7 +82,7 @@ export struct HistorySheet {
   // 多选集合不可变整体换引用更新：V2 @Local 赋值观测不观测 Set 内部变更
   @Local selectedKeys: Set<string> = new Set<string>();
   @Local pressedKey: string = '';
-  // 长按气泡提示（US6）：当前弹气泡的按钮键（单态互斥），onStateChange 气泡消失时清空防残留
+  // 长按气泡提示（v0.7-p1 US6）：当前弹气泡的按钮键（单态互斥），onStateChange 气泡消失时清空防残留
   @Local popupTip: string = '';
   // 面板显隐同源：与 GlassSheet/Index 共享同键实例，关闭时驱动多选复位
   @Local showPlayHistory: BoolState = connectBool(Constants.AS_SHOW_PLAY_HISTORY, false);
@@ -90,15 +90,15 @@ export struct HistorySheet {
     connectStr(Constants.AS_ACCENT_COLOR, Constants.ACCENT_DEFAULT);
   private controller: PlayerController = PlayerController.getInstance();
   private playHistorySource: HistoryDataSource = new HistoryDataSource();
-  // ListScroller（extends Scroller）：取消确认后经 closeAllSwipeActions 复位滑动行（US1）
+  // ListScroller（extends Scroller）：取消确认后经 closeAllSwipeActions 复位滑动行（v0.3-r2 US1）
   private historyScroller: ListScroller = new ListScroller();
-  // 长按守卫（FR-009）：堵长按后的回退 onClick，统一三处模式
+  // 长按守卫（v0.5-p2-1 FR-009）：堵长按后的回退 onClick，统一三处模式
   private longPressGuard: LongPressGuard = new LongPressGuard();
-  // 复选框区拖选会话（FR-014）：null=未在拖选；方向性扫选模式按下时锁定，同次拖动不反转
+  // 复选框区拖选会话（v0.5-p2-1 FR-014）：null=未在拖选；方向性扫选模式按下时锁定，同次拖动不反转
   private sweepSession: SweepSession | null = null;
-  // 整行拖选会话（US1）：null=未在拖选；与 sweepSession 单指手势互斥，新建另一方时先清本方
+  // 整行拖选会话（v0.5-p3 US1）：null=未在拖选；与 sweepSession 单指手势互斥，新建另一方时先清本方
   private rowDrag: RowDragSession | null = null;
-  // 边缘自动滚动器（FR-018）：拖选中手指进入列表可视区边缘带时驱动列表滚动续扫
+  // 边缘自动滚动器（v0.5-p2-1 FR-018）：拖选中手指进入列表可视区边缘带时驱动列表滚动续扫
   private edgeScroller: EdgeAutoScroller = new EdgeAutoScroller();
   // 进度广播退订句柄：aboutToDisappear 中调用，避免监听器累积
   private unsubscribePlayer: () => void = (): void => {};
@@ -119,7 +119,7 @@ export struct HistorySheet {
     registerHistorySelectExit(undefined);
   }
 
-  // US6 归并派生（D11）：按 bvid 聚合、viewAt 最新分P 为代表、按代表 viewAt 倒序；
+  // fix-multi-part US6 归并派生（D11）：按 bvid 聚合、viewAt 最新分P 为代表、按代表 viewAt 倒序；
   // 纯展示层派生（FR-015），controller 存储仍分P 粒度，不落盘
   private buildMergedRows(items: PlayHistoryItem[]): HistoryRow[] {
     const rows: HistoryRow[] = [];
@@ -205,7 +205,7 @@ export struct HistorySheet {
     return row.latest.videoTitle !== '' ? row.latest.videoTitle : row.latest.title;
   }
 
-  // 归并行副行三段文案（D14，修订：分P 名不展示）：相对时间恒最前；代表分P page>1 时插「看到Pn」；
+  // 归并行副行三段文案（fix-multi-part D14，修订：分P 名不展示）：相对时间恒最前；代表分P page>1 时插「看到Pn」；
   // 尾段沿用既有规则（progress===-1 已听完 / 有进度且时长已知 剩 mm:ss / 其余降级省略）。
   // 单P 与仅 P1 历史的多P 无中段，形态与第一轮一致
   private historyMetaText(item: PlayHistoryItem): string {
@@ -243,7 +243,7 @@ export struct HistorySheet {
     }
   }
 
-  // 左滑删除归并行（US6 bvid 级，D11）：一行 = 该视频全部分P 历史——先从 controller 实时历史
+  // 左滑删除归并行（fix-multi-part US6 bvid 级，D11）：一行 = 该视频全部分P 历史——先从 controller 实时历史
   // 展开该 bvid 全部复合键，逐键调既有 removePlayHistoryItem（存储零变化），再做行级补位动画；
   // 点击时实时解析下标，避免 LazyForEach 键复用导致的陈旧索引
   private removeHistoryRow(row: HistoryRow): void {
@@ -280,7 +280,7 @@ export struct HistorySheet {
     });
   }
 
-  // 左滑删除确认（US1 双触发）：点垃圾桶/滑过阈值（SwipeActionItem.onAction）均进本弹窗，
+  // 左滑删除确认（v0.3-r2 US1 双触发）：点垃圾桶/滑过阈值（SwipeActionItem.onAction）均进本弹窗，
   // 确认后删除，取消/点外围经 closeAllSwipeActions 复位收起滑动行
   private confirmRemoveHistoryRow(row: HistoryRow): void {
     this.getUIContext().showAlertDialog({
@@ -307,7 +307,7 @@ export struct HistorySheet {
     });
   }
 
-  // 左滑露出的红色垃圾桶删除钮（US1 双触发）：点击进确认弹窗，滑过阈值（onAction）同弹窗
+  // 左滑露出的红色垃圾桶删除钮（v0.3-r2 US1 双触发）：点击进确认弹窗，滑过阈值（onAction）同弹窗
   @Builder
   historyDeleteAction(row: HistoryRow) {
     Column() {
@@ -330,7 +330,7 @@ export struct HistorySheet {
     .padding({ left: Constants.TOKEN_SPACE_M, right: Constants.TOKEN_SPACE_M })
   }
 
-  // 特殊标记标题前缀（v0.7-part4 R2）：充电/互动/付费图标、大会员「大」单字，数据来自代表分P 历史，
+  // 特殊标记标题前缀（v0.7-p4 R2）：充电/互动/付费图标、大会员「大」单字，数据来自代表分P 历史，
   // 与行尾 X/! 分位
   @Builder
   specialMarkPrefix(item: PlayHistoryItem) {
@@ -389,7 +389,7 @@ export struct HistorySheet {
     this.selectedKeys = new Set<string>();
   }
 
-  // 复选框区拖选（FR-014/FR-018）：方向性扫选——按下按 bvid 实时查行号采样选中态锁定加/减扫模式
+  // 复选框区拖选（v0.5-p2-1 FR-014/FR-018）：方向性扫选——按下按 bvid 实时查行号采样选中态锁定加/减扫模式
   // （LazyForEach 不取 index 闭包，删除后键查找天然容忍行号漂移），等高步长换算目标行，
   // 起点→目标区间按锁定模式整体 Set 换引用；手指进入列表边缘带时自动滚动续扫
   private startSweep(bvid: string, event: GestureEvent): void {
@@ -452,7 +452,7 @@ export struct HistorySheet {
     this.sweepSession = null;
   }
 
-  // 整行拖选（US1 D2）：长按完成翻转起点行并锁定画笔方向（原未选=加扫、原已选=减扫），
+  // 整行拖选（v0.5-p3 US1 D2）：长按完成翻转起点行并锁定画笔方向（原未选=加扫、原已选=减扫），
   // 普通态长按同时进多选（翻转即预选）；bvid 实时查行号（LazyForEach 不取 index 闭包，
   // 删除后键查找天然容忍行号漂移）；会话重建即取代可能残留的扫选会话
   private beginRowDrag(bvid: string, event: GestureEvent): void {
@@ -524,7 +524,7 @@ export struct HistorySheet {
     }
   }
 
-  // 尽头检测（US1 FR-003）：顶部零偏移、底部 isAtEnd，到尽头停滚清理
+  // 尽头检测（v0.5-p3 US1 FR-003）：顶部零偏移、底部 isAtEnd，到尽头停滚清理
   private edgeAtEnd(downward: boolean): boolean {
     if (downward) {
       return this.historyScroller.isAtEnd();
@@ -542,7 +542,7 @@ export struct HistorySheet {
     }, (down: boolean): boolean => this.edgeAtEnd(down));
   }
 
-  // 进出多选统一动画入口（FR-006）：行首勾选框宽度/透明度与头部双态随同一 animateTo 翻转
+  // 进出多选统一动画入口（v0.5-p2-1 FR-006）：行首勾选框宽度/透明度与头部双态随同一 animateTo 翻转
   // selectMode 驱动，进出互逆；动画中断终态以 selectMode 状态为准
   private enterSelectMode(): void {
     this.getUIContext().animateTo({ duration: Constants.TOKEN_SELECT_ANIM_MS, curve: Curve.EaseOut }, (): void => {
@@ -556,7 +556,7 @@ export struct HistorySheet {
     });
   }
 
-  // 删除所选归并行（US6 bvid 级，D11）：二次确认后 UI 层把每个选中 bvid 展开为该视频全部分P
+  // 删除所选归并行（fix-multi-part US6 bvid 级，D11）：二次确认后 UI 层把每个选中 bvid 展开为该视频全部分P
   // 复合键（itemKeyOf 合成）调既有 removeSelectedHistory（controller 存储零变化），
   // 先退多选再高→低增量补位动画，交互对齐队列
   private removeSelectedHistory(): void {
@@ -612,7 +612,7 @@ export struct HistorySheet {
 
   build() {
     Column() {
-      // Stack 承载双态条件渲染 + OPACITY 过渡交叉淡化（进出多选同 animateTo 驱动，FR-006）
+      // Stack 承载双态条件渲染 + OPACITY 过渡交叉淡化（进出多选同 animateTo 驱动，v0.5-p2-1 FR-006）
       Stack() {
         if (!this.selectMode.value) {
           Row() {
@@ -644,7 +644,7 @@ export struct HistorySheet {
           .width('100%')
           .transition(TransitionEffect.OPACITY)
         } else {
-          // 多选操作行（US4/US5，对齐队列档式）：全选+独立计数/删除所选(纯图标)/返回
+          // 多选操作行（v0.4-p1-2 US4/US5，对齐队列档式）：全选+独立计数/删除所选(纯图标)/返回
           Row() {
             Row() {
               SymbolGlyph($r('sys.symbol.checkmark_circle_on_circle'))
@@ -781,7 +781,7 @@ export struct HistorySheet {
             LazyForEach(this.playHistorySource, (row: HistoryRow) => {
               ListItem() {
                 Row() {
-                  // 勾选框区拖选（FR-014）：外包 Column 承载扫选手势，热区限勾选框列，
+                  // 勾选框区拖选（v0.5-p2-1 FR-014）：外包 Column 承载扫选手势，热区限勾选框列，
                   // Pan 位移阈值内为点按（Checkbox onChange 切勾不冲突），行其余区域维持列表滚动
                   Column() {
                     SelectCheckbox({
@@ -843,7 +843,7 @@ export struct HistorySheet {
                   .layoutWeight(1)
                   .margin({ left: Constants.TOKEN_SPACE_10 })
 
-                  // 失效标记（v0.7-part3）：行尾红 X（-404 无法取流），对齐队列条目视觉档；
+                  // 失效标记（v0.7-p3）：行尾红 X（-404 无法取流），对齐队列条目视觉档；
                   // 异常标记（感叹号，amber）次之：X 与感叹号防御性共存时 X 优先
                   if (this.controller.hasInvalid(row.bvid)) {
                     SymbolGlyph($r('sys.symbol.xmark_circle'))
@@ -878,7 +878,7 @@ export struct HistorySheet {
                     this.replayHistory(row.latest);
                   }
                 })
-                // 整行拖选（US1 D2）：Sequence(长按→拖) 常挂两态——普通竖滑未长按不触发归列表滚动；
+                // 整行拖选（v0.5-p3 US1 D2）：Sequence(长按→拖) 常挂两态——普通竖滑未长按不触发归列表滚动；
                 // 长按翻转起点行进多选/切选，随后拖动区间涂刷（双向画笔）；
                 // 长按事件取不到触点时回退纯多选预选（不建会话）
                 .gesture(
@@ -914,7 +914,7 @@ export struct HistorySheet {
                   )
                 )
               }
-              // 左滑删除（US1 双触发，US6 bvid 级）：SwipeActionItem——点垃圾桶/滑过阈值均进确认弹窗；
+              // 左滑删除（v0.3-r2 US1 双触发，fix-multi-part US6 bvid 级）：SwipeActionItem——点垃圾桶/滑过阈值均进确认弹窗；
               // 多选态不挂载删除动作，退出多选恢复
               .swipeAction(this.selectMode.value ? {} : {
                 end: {
@@ -927,7 +927,7 @@ export struct HistorySheet {
                 }
               })
             }, (row: HistoryRow) => `${row.bvid}_${row.latest.viewAt}`)
-            // 容量尾注（US7 FR-017）：列表非空恒显（空态走外层分支不渲染本 List）、不可交互、
+            // 容量尾注（v0.5-p3 US7 FR-017）：列表非空恒显（空态走外层分支不渲染本 List）、不可交互、
             // 多选/删除后仍居队尾；N 动态引用 HISTORY_MAX（上限同源）；contentEndOffset 保证可完整滚出渐隐带
             ListItem() {
               Text(`仅保留最近 ${Constants.HISTORY_MAX} 条播放记录`)
@@ -942,7 +942,7 @@ export struct HistorySheet {
           .height('100%')
           .id(SWEEP_LIST_ID)
           .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
-          // 末行逃出 GlassSheet 底部渐隐带（T018）：与 QueueSheet 同根因，此前无任何 end offset 更严重
+          // 末行逃出 GlassSheet 底部渐隐带（v0.5-p1-1 T018）：与 QueueSheet 同根因，此前无任何 end offset 更严重
           .contentEndOffset(Constants.SHEET_FADE_HEIGHT)
         }
         .width('100%')

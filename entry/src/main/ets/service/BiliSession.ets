@@ -17,7 +17,7 @@ export class BiliSession {
   face: string = '';
   buvid3: string = '';
   buvid4: string = '';
-  // b_nut（风控指纹辅助字段，US3）：由响应 Set-Cookie 被动收集，随 Cookie 一并携带
+  // b_nut（风控指纹辅助字段，v0-r4 US3）：由响应 Set-Cookie 被动收集，随 Cookie 一并携带
   bNut: string = '';
 
   isLogged(): boolean {
@@ -35,7 +35,7 @@ export class BiliSession {
     this.biliJct = BiliSession.extractValue(cookie, 'bili_jct');
   }
 
-  // 被动收集响应 Set-Cookie 中的 b_nut（US3）：仅在解析出非空值时覆写
+  // 被动收集响应 Set-Cookie 中的 b_nut（v0-r4 US3）：仅在解析出非空值时覆写
   collectSetCookie(setCookie: string): void {
     if (setCookie === '') {
       return;

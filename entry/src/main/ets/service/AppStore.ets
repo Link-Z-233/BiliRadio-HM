@@ -11,7 +11,7 @@ export class PlaylistSnapshot {
   items: BiliVideo[] = [];
   lastIndex: number = -1;
   lastPosMs: number = 0;
-  // 「下一首播放」指定名单（v0.8-part4 US1）：有序复合键列表，随队列文件同存取
+  // 「下一首播放」指定名单（v0.8-p4 US1）：有序复合键列表，随队列文件同存取
   designatedKeys: string[] = [];
 }
 
@@ -109,7 +109,7 @@ export class AppStore {
       if (root['lastPosMs'] !== undefined) {
         snapshot.lastPosMs = root['lastPosMs'] as number;
       }
-      // 指定名单（v0.8-part4 US1）：旧文件缺字段按空名单，元素非 string 逐条丢弃
+      // 指定名单（v0.8-p4 US1）：旧文件缺字段按空名单，元素非 string 逐条丢弃
       if (root['designated'] !== undefined) {
         const designated: Object[] = root['designated'] as Object[];
         for (let i = 0; i < designated.length; i++) {

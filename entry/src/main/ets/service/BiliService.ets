@@ -99,7 +99,7 @@ class UpAppPage {
   hasNext: boolean = false;
 }
 
-// playurl 响应解析载体（v0.5 cloud-history-sync）：业务数据 + 云端播放进度（last_play_time，毫秒）
+// playurl 响应解析载体（v0.5-p1-2）：业务数据 + 云端播放进度（last_play_time，毫秒）
 class DashFetchResult {
   tracks: AudioTrack[] = [];
   lastPlayTimeMs: number = 0;
@@ -159,7 +159,7 @@ function parseDurationLen(len: string): number {
   return seconds;
 }
 
-// US3：base64 编码（ArkTS 运行时无 btoa/Buffer，自实现标准字母表编码）
+// v0-r4 US3：base64 编码（ArkTS 运行时无 btoa/Buffer，自实现标准字母表编码）
 const B64_ALPHABET: string = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 function base64EncodeBytes(bytes: Uint8Array): string {
@@ -176,7 +176,7 @@ function base64EncodeBytes(bytes: Uint8Array): string {
   return out;
 }
 
-// US3：dm_img 风控指纹随机串（与 PiliPlus 同源做法）——随机字节域 0x26..0x7E（避开 '%'），
+// v0-r4 US3：dm_img 风控指纹随机串（与 PiliPlus 同源做法）——随机字节域 0x26..0x7E（避开 '%'），
 // base64 后截去末 2 字符；minBytes/maxBytes 控制随机长度区间
 function randomDmImgStr(minBytes: number, maxBytes: number): string {
   const span: number = maxBytes - minBytes;
@@ -188,10 +188,10 @@ function randomDmImgStr(minBytes: number, maxBytes: number): string {
   return base64EncodeBytes(bytes).slice(0, -2);
 }
 
-// US3：空间投稿查询参数——在既有参数上补齐 dm_img 全套风控指纹
+// v0-r4 US3：空间投稿查询参数——在既有参数上补齐 dm_img 全套风控指纹
 // （dm_img_list/dm_img_str/dm_cover_img_str/dm_img_inter/web_location/order_avoided/tid），
 // 每次调用随机值刷新（PiliPlus 每次请求重新生成）
-// US1 触底翻页（round5 修复）：pn 参数化，默认 1 保持既有调用点行为
+// v0-r5 US1 触底翻页：pn 参数化，默认 1 保持既有调用点行为
 function buildUpQueryParams(mid: number, pn: number = 1): Record<string, string> {
   return {
     'mid': mid.toString(),
@@ -209,7 +209,7 @@ function buildUpQueryParams(mid: number, pn: number = 1): Record<string, string>
   };
 }
 
-// US9：日志只记 host+path，截掉可能含 cookie/token 的 query string
+// v0-r4 US9：日志只记 host+path，截掉可能含 cookie/token 的 query string
 function logUrl(url: string): string {
   const qIdx: number = url.indexOf('?');
   return qIdx >= 0 ? url.substring(0, qIdx) : url;
@@ -240,21 +240,21 @@ function isUpQueryFatal(err: Object): boolean {
   return msg.indexOf('-404') >= 0 || msg.indexOf('-400') >= 0 || msg.indexOf('-101') >= 0;
 }
 
-// 风控类错误判定（v0.5-part4 D7）：-352/-412/-403/-799 错误码 + 非 JSON 风控页特征（checkJsonBody 抛错含「风控」），
-// 与 isUpQueryFatal（业务类）互补，供 Web 链冷却置位与重试分流；v0.7-part3 起导出供 PlayerController 失败分类
+// 风控类错误判定（v0.5-p4 D7）：-352/-412/-403/-799 错误码 + 非 JSON 风控页特征（checkJsonBody 抛错含「风控」），
+// 与 isUpQueryFatal（业务类）互补，供 Web 链冷却置位与重试分流；v0.7-p3 起导出供 PlayerController 失败分类
 export function isRiskControlError(err: Object): boolean {
   const msg: string = err instanceof Error ? err.message : String(err);
   return msg.indexOf('-352') >= 0 || msg.indexOf('-412') >= 0 ||
     msg.indexOf('-403') >= 0 || msg.indexOf('-799') >= 0 || msg.indexOf('风控') >= 0;
 }
 
-// Web 链进程级冷却（v0.5-part4 D2/D3）：截止时间戳，置位后 fetchUpVideosViaWeb 入口直接抛错，
+// Web 链进程级冷却（v0.5-p4 D2/D3）：截止时间戳，置位后 fetchUpVideosViaWeb 入口直接抛错，
 // now 越过截止自然到期恢复；杀进程即失效
 let webChainCooldownUntil: number = 0;
 
 function httpGet(url: string, headers: Record<string, string> | undefined = undefined): Promise<string> {
   const httpRequest: http.HttpRequest = http.createHttp();
-  let logged: boolean = false; // US9：then 已记录响应码后，catch 不再重复记录
+  let logged: boolean = false; // v0-r4 US9：then 已记录响应码后，catch 不再重复记录
   return httpRequest.request(url, {
     method: http.RequestMethod.GET,
     header: headers === undefined ? buildHeaders() : headers,
@@ -283,7 +283,7 @@ function httpGet(url: string, headers: Record<string, string> | undefined = unde
 
 function httpGetWithCookies(url: string): Promise<QrPollHttpResult> {
   const httpRequest: http.HttpRequest = http.createHttp();
-  let logged: boolean = false; // US9：then 已记录响应码后，catch 不再重复记录
+  let logged: boolean = false; // v0-r4 US9：then 已记录响应码后，catch 不再重复记录
   return httpRequest.request(url, {
     method: http.RequestMethod.GET,
     header: buildHeaders(),
@@ -331,7 +331,7 @@ function httpGetWithCookies(url: string): Promise<QrPollHttpResult> {
 function httpPostForm(url: string, body: string): Promise<string> {
   const httpRequest: http.HttpRequest = http.createHttp();
   const headers: Record<string, string> = buildHeaders();
-  let logged: boolean = false; // US9：then 已记录响应码后，catch 不再重复记录
+  let logged: boolean = false; // v0-r4 US9：then 已记录响应码后，catch 不再重复记录
   headers['Content-Type'] = 'application/x-www-form-urlencoded';
   return httpRequest.request(url, {
     method: http.RequestMethod.POST,
@@ -379,7 +379,7 @@ function cleanTitle(title: string): string {
   return t;
 }
 
-// view 接口完整解析结果：video 视频级元数据 + parts 分P 条目（形态 A，标题按 D4 合成；单P 恰 1 条）
+// view 接口完整解析结果：video 视频级元数据 + parts 分P 条目（形态 A，标题按 fix-multi-part D4 合成；单P 恰 1 条）
 export class VideoDetail {
   video: BiliVideo = new BiliVideo();
   parts: BiliVideo[] = [];
@@ -468,7 +468,7 @@ export class BiliService {
     return WbiSigner.getMixinKey(imgUrl, subUrl);
   }
 
-  // T019：合集列表翻页抓取——page_num 自 1 递增，本页返回条数 < page_size 即终止（短页终止），
+  // play-history-progress T019：合集列表翻页抓取——page_num 自 1 递增，本页返回条数 < page_size 即终止（短页终止），
   // 安全上限 10 页防异常数据死循环；页间 sleep 参照 fetchSeasonVideos 的 1500ms；
   // 该端点不得带 WBI 签名参数，多余 w_rid/wts 触发 -400（BILI_NOTES.md §3.2）
   static async fetchSeasonsList(mid: number): Promise<Season[]> {
@@ -536,7 +536,7 @@ export class BiliService {
   }
 
   // UP 主的「系列」列表；ponytail: 复用 Season 类，seasonId 字段承载 series_id
-  // T019：与 fetchSeasonsList 同构的翻页抓取（短页终止 + 10 页上限 + 页间 1500ms）
+  // play-history-progress T019：与 fetchSeasonsList 同构的翻页抓取（短页终止 + 10 页上限 + 页间 1500ms）
   static async fetchSeriesList(mid: number): Promise<Season[]> {
     const series: Season[] = [];
     const ps: number = 20;
@@ -632,7 +632,7 @@ export class BiliService {
           item.ownerName = owner['name'] as string;
         }
       }
-      // 特殊标记（v0.7-part4，仅合集/系列链在位字段）：互动 = interactive_video，付费 = ugc_pay>0；
+      // 特殊标记（v0.7-p4，仅合集/系列链在位字段）：互动 = interactive_video，付费 = ugc_pay>0；
       // 充电/大会员无字段不标（天然盲区，不补数）
       const interactiveRaw: Object = rec['interactive_video'];
       const ugcPayRaw: Object = rec['ugc_pay'];
@@ -833,7 +833,7 @@ export class BiliService {
 
   // UP 主最新投稿（单页 20 条，新集在前）
   // 风控降级链：APP 签名链（游客 appkey+ts+sign，无 cookie/WBI 依赖）优先，任何失败只记日志后
-  // 降级 Web 链；Web 链内 -352/-412/风控页/网络错误等可重试错误指数退避后进下一轮（v0.5-part4：不再重置 buvid），
+  // 降级 Web 链；Web 链内 -352/-412/风控页/网络错误等可重试错误指数退避后进下一轮（v0.5-p4：不再重置 buvid），
   // -404/-400/-101 等业务错误立即失败；全败时抛出最后一轮真实错误（含错误码）
   static async fetchUpVideos(mid: number): Promise<BiliVideo[]> {
     try {
@@ -870,7 +870,7 @@ export class BiliService {
     return cached === undefined ? 0 : cached;
   }
 
-  // US1/US2 触底加载更早：APP 签名链 cursor 语义（aid=列表末条 + next=上页服务端游标）；
+  // appsign-up-fetch US1/US2 触底加载更早：APP 签名链 cursor 语义（aid=列表末条 + next=上页服务端游标）；
   // 无游标或链路失败抛错，由调用方降级 fetchUpVideosByPage 同页号 Web 链
   static async fetchUpVideosOlder(mid: number, lastAid: number): Promise<BiliVideo[]> {
     const cursor: UpAppCursor | undefined = upAppCursorCache.get(mid);
@@ -904,19 +904,19 @@ export class BiliService {
     return BiliService.fetchUpVideosViaWeb(mid, page);
   }
 
-  // US2 双链合并取稠：纯 Web 头页（不经 APP 链重试），失败抛错由调用方降级为 APP 结果
+  // v0-r7 US2 双链合并取稠：纯 Web 头页（不经 APP 链重试），失败抛错由调用方降级为 APP 结果
   static fetchUpWebHead(mid: number): Promise<BiliVideo[]> {
     return BiliService.fetchUpVideosViaWeb(mid, 1);
   }
 
-  // Web 三轮退避（WBI→plain）；v0.5-part4：入口冷却门 + 空位 buvid 保底，
+  // Web 三轮退避（WBI→plain）；v0.5-p4：入口冷却门 + 空位 buvid 保底，
   // 单轮双端点风控败置位进程冷却并立即抛错，重试不换 buvid，网络类失败仍 3 轮退避
   private static async fetchUpVideosViaWeb(mid: number, pn: number): Promise<BiliVideo[]> {
     const label: string = pn > 1 ? 'UP投稿翻页' : 'UP投稿列表';
     if (Date.now() < webChainCooldownUntil) {
       throw new Error('Web链冷却中');
     }
-    // FR-004：入口空 buvid 保底（重试全程不再 reset，身份稳定）
+    // v0.5-p4 FR-004：入口空 buvid 保底（重试全程不再 reset，身份稳定）
     await BiliService.ensureBuvid();
     const spaceHeaders: Record<string, string> = buildSpaceHeaders(mid);
     let lastError: Error = new Error('查询UP主投稿失败');
@@ -924,7 +924,7 @@ export class BiliService {
       if (attempt > 0) {
         await sleep(2000 * attempt);
       }
-      // US3：每轮注入全套 dm_img 风控指纹参数（随机值按轮刷新）
+      // v0-r4 US3：每轮注入全套 dm_img 风控指纹参数（随机值按轮刷新）
       const params: Record<string, string> = buildUpQueryParams(mid, pn);
       let wbiRiskBlocked: boolean = false;
       // WBI 端点优先：网页/PiliPlus 同源的完整数据端点；旧版 plain 端点实测漏发部分条目，仅作 WBI 被风控时的降级兜底
@@ -957,7 +957,7 @@ export class BiliService {
         if (isUpQueryFatal(plainError)) {
           throw plainError;
         }
-        // D3：单轮 WBI+plain 双风控败即置位进程冷却并抛当轮真实错误（失败请求封顶 2 次）
+        // v0.5-p4 D3：单轮 WBI+plain 双风控败即置位进程冷却并抛当轮真实错误（失败请求封顶 2 次）
         if (wbiRiskBlocked && isRiskControlError(plainError)) {
           webChainCooldownUntil = Date.now() + Constants.WEB_CHAIN_COOLDOWN_MS;
           Logger.log('error', label, `Web链双风控败置位冷却 mid=${mid} pn=${pn}`);
@@ -1058,7 +1058,7 @@ export class BiliService {
       if (rec['author'] !== undefined && rec['author'] !== null) {
         item.ownerName = rec['author'] as string;
       }
-      // 特殊标记（v0.7-part4，判据只认明确真值，字段缺失跳过）：
+      // 特殊标记（v0.7-p4，判据只认明确真值，字段缺失跳过）：
       // 充电 = Web vlist is_charging_arc/elec_arc_type + APP cursor badges 文案「充电专属」（该链唯一信号，精确匹配防改版误标）
       const chargingArcRaw: Object = rec['is_charging_arc'];
       const elecTypeRaw: Object = rec['elec_arc_type'];
@@ -1084,7 +1084,7 @@ export class BiliService {
       item.isInteractive = (steinsRaw !== undefined && steinsRaw !== null && Boolean(steinsRaw)) ||
         (steinsGateRaw !== undefined && steinsGateRaw !== null && Boolean(steinsGateRaw)) ||
         (attributeRaw !== undefined && attributeRaw !== null && (Number(attributeRaw) & (1 << 29)) > 0);
-      // 付费 = is_pay（Web vlist）/ ugc_pay>0 或 is_ugcpay（APP cursor）/ is_pugv（课程，R2 归付费类）
+      // 付费 = is_pay（Web vlist）/ ugc_pay>0 或 is_ugcpay（APP cursor）/ is_pugv（课程，v0.7-p4 R2 归付费类）
       const isPayRaw: Object = rec['is_pay'];
       const ugcPayRaw: Object = rec['ugc_pay'];
       const ugcPayFlagRaw: Object = rec['is_ugcpay'];
@@ -1111,7 +1111,7 @@ export class BiliService {
     };
     let lastError: Error = new Error('查询UP主失败');
     // acc/info 风控严格（-352 频发）：最多 3 轮「WBI 签名 acc/info → card 兜底」降级；
-    // -352/-412/风控页等可重试错误指数退避后进下一轮（v0.5-part4：不再重置 buvid，身份稳定），
+    // -352/-412/风控页等可重试错误指数退避后进下一轮（v0.5-p4：不再重置 buvid，身份稳定），
     // -404/-400/-101 等业务错误立即失败；全败时抛出最后一轮真实错误（含错误码）
     for (let attempt: number = 0; attempt < 3; attempt++) {
       if (attempt > 0) {
@@ -1436,7 +1436,7 @@ export class BiliService {
     return items;
   }
 
-  // US1 触底加载更早（round5 修复）：按页号抓取收藏夹单页内容（ps=20，mtime 倒序，页号越大越老）
+  // v0-r5 US1 触底加载更早：按页号抓取收藏夹单页内容（ps=20，mtime 倒序，页号越大越老）
   static async fetchFolderVideosByPage(mediaId: number, pn: number): Promise<BiliVideo[]> {
     const ps: number = 20;
     const resultStr: string = await httpGet(
@@ -1483,7 +1483,7 @@ export class BiliService {
     }
   }
 
-  // 播放进度心跳上报（v0.5 cloud-history-sync US1）：web heartbeat 端点 form POST，
+  // 播放进度心跳上报（v0.5-p1-2 US1）：web heartbeat 端点 form POST，
   // 参数 bvid/cid/played_time（秒）/type=3（UGC）/csrf=bili_jct（PiliPlus VideoHttp.heartBeat 同源）；
   // 请求头复用 httpPostForm 内建 buildHeaders()（web UA + cookie 自动携带）；
   // best-effort 静默：成功/失败布尔返回，失败不抛错由调用方熔断计数
@@ -1525,7 +1525,7 @@ export class BiliService {
         }
         if (session.hasBuvid()) {
           hilog.info(Constants.LOG_DOMAIN, Constants.LOG_TAG, 'buvid fetched');
-          // US3：buvid 获取成功后执行一次 ExClimbWuzhi 激活（fire-and-forget，失败静默）
+          // v0-r4 US3：buvid 获取成功后执行一次 ExClimbWuzhi 激活（fire-and-forget，失败静默）
           BiliService.activateBuvid().catch((): void => {});
           return;
         }
@@ -1536,10 +1536,10 @@ export class BiliService {
     }
   }
 
-  // US3：buvid 激活状态（每进程仅激活一次；失败不重试，下次进程启动可再试）
+  // v0-r4 US3：buvid 激活状态（每进程仅激活一次；失败不重试，下次进程启动可再试）
   private static buvidActivated: boolean = false;
 
-  // US3：ExClimbWuzhi 风控网关 buvid 激活（PiliPlus 最小伪装 payload）：
+  // v0-r4 US3：ExClimbWuzhi 风控网关 buvid 激活（PiliPlus 最小伪装 payload）：
   // JSON body `{payload: <json串>}`，携带 buvid3 Cookie 与 BiliDroid UA；
   // 从响应 Set-Cookie 被动收集 b_nut 存入 BiliSession；全程失败静默不阻塞主流程
   static async activateBuvid(): Promise<void> {
@@ -1587,7 +1587,7 @@ export class BiliService {
     }
   }
 
-  // US3：ExClimbWuzhi POST（JSON body + buvid3 Cookie + BiliDroid UA）；
+  // v0-r4 US3：ExClimbWuzhi POST（JSON body + buvid3 Cookie + BiliDroid UA）；
   // 不校验响应码/响应体（激活结果不敏感），仅收集 Set-Cookie 返回
   private static async postExClimbWuzhi(body: string, buvid3: string): Promise<string> {
     const httpRequest: http.HttpRequest = http.createHttp();
@@ -1752,7 +1752,7 @@ export class BiliService {
     return cookie;
   }
 
-  // 薄包装（plan D5）：只要视频级元数据的既有调用方（desc 回填等）零改动
+  // 薄包装（fix-multi-part plan D5）：只要视频级元数据的既有调用方（desc 回填等）零改动
   static async fetchVideoInfo(bvid: string): Promise<BiliVideo> {
     const detail: VideoDetail = await BiliService.fetchVideoDetail(bvid);
     return detail.video;
@@ -1814,7 +1814,7 @@ export class BiliService {
         video.view = stat['view'] as number;
       }
     }
-    // 特殊标记（v0.7-part4 R2）：本链为 web-interface/view——充电读顶层 is_upower_exclusive（官方文档位置），
+    // 特殊标记（v0.7-p4 R2）：本链为 web-interface/view——充电读顶层 is_upower_exclusive（官方文档位置），
     // rights 同名兜底；rights.pay（大会员，与充电互斥防双标）/ugc_pay（付费）/is_stein_gate（互动）按官方 rights 表；
     // charging_pay/charging_plus/interaction 为 APP v2/view 字段，本链通常缺失，判存在即命中、缺失跳过
     const chargingPayRaw: Object = data['charging_pay'];
@@ -1861,7 +1861,7 @@ export class BiliService {
   }
 
   // pages[] 逐字段容错解析（cid/page/part/duration）：cid≤0 跳过、page≤0 按序补、分P 时长缺失回退视频时长；
-  // 条目继承视频级元数据，标题按 D4 合成（多P 才缀 Pn）；pages 缺失/为空/全无效回退视频级 cid 单P 条目
+  // 条目继承视频级元数据，标题按 fix-multi-part D4 合成（多P 才缀 Pn）；pages 缺失/为空/全无效回退视频级 cid 单P 条目
   private static parsePartsFromViewData(data: Record<string, Object>, video: BiliVideo): BiliVideo[] {
     const parts: BiliVideo[] = [];
     const pagesRaw: Object = data['pages'];
@@ -2069,7 +2069,7 @@ export class BiliService {
     return result;
   }
 
-  // 回落算法（FR-003，纯函数）：MAX→列表首位（bandwidth 降序即最高带宽，含 Hi-Res/杜比升级）；
+  // 回落算法（audio-quality-settings FR-003，纯函数）：MAX→列表首位（bandwidth 降序即最高带宽，含 Hi-Res/杜比升级）；
   // 期望档 qn 精确存在→取之；否则取不高于期望档的常规档（仅 30216/30232/30280 参与；
   // Hi-Res/杜比档缺档时回落上限按 192K 计——qn 数值序与质量序不一致，按数值比较会错落 132K）
   // 中带宽最高者；无任何 ≤期望 常规档→取列表首位兜底（不能不放）；空列表抛错

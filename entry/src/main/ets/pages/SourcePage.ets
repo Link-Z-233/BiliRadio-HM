@@ -96,15 +96,15 @@ struct SourcePage {
   @Local selectMode: boolean = false;
   // 多选集合不可变整体换引用更新：V2 @Local 赋值观测不观测 Set 内部变更
   @Local selectedKeys: Set<string> = new Set<string>();
-  // 复选框区拖选会话（FR-014）：null=未在拖选；方向性扫选模式按下时锁定，同次拖动不反转
+  // 复选框区拖选会话（v0.5-p2-1 FR-014）：null=未在拖选；方向性扫选模式按下时锁定，同次拖动不反转
   private sweepSession: SweepSession | null = null;
-  // 整行拖选会话（US1）：null=未在拖选；与 sweepSession 单指手势互斥，新建另一方时先清本方
+  // 整行拖选会话（v0.5-p3 US1）：null=未在拖选；与 sweepSession 单指手势互斥，新建另一方时先清本方
   private rowDrag: RowDragSession | null = null;
-  // 边缘自动滚动器（FR-018）：拖选中手指进入列表可视区边缘带时驱动列表滚动续扫
+  // 边缘自动滚动器（v0.5-p2-1 FR-018）：拖选中手指进入列表可视区边缘带时驱动列表滚动续扫
   private edgeScroller: EdgeAutoScroller = new EdgeAutoScroller();
   private seenBefore: number = 0;         // 进入时的 lastSeenAt，NEW 徽标基准
   private olderPage: number = 1;          // 已加载的最大页号（sortReverse 语义）
-  private olderFailAt: number = 0;        // 加载更早失败时间戳：冷却期内禁止重试（US2）
+  private olderFailAt: number = 0;        // 加载更早失败时间戳：冷却期内禁止重试（v0-r6 US2）
   // Web 降级链已成功取过的最大页号：起始页按列表长度对齐页界推算，此值兜底防跳条重复
   private upWebLastPage: number = 0;
   // 最近一次触底页的实际来源：APP 链稀疏（服务端钳 ps 至 20），仅 Web 链短页才是权威到底
@@ -112,7 +112,7 @@ struct SourcePage {
   @Local sub: Subscription = new Subscription();
   // 已播集契约同 selectedKeys：V2 @Local 赋值观测不观测 Set 内部变更，整体换引用驱动行上标记即时刷新
   @Local playedSet: Set<string> = new Set<string>();
-  // 长按守卫（FR-009）：堵长按后的回退 onClick，三处多选统一模式
+  // 长按守卫（v0.5-p2-1 FR-009）：堵长按后的回退 onClick，三处多选统一模式
   private longPressGuard: LongPressGuard = new LongPressGuard();
   // 批量入队在途标记：fav 详情补全耗时数秒，期间重复确认入队直接忽略（防重入）
   private enqueueInFlight: boolean = false;
@@ -120,7 +120,7 @@ struct SourcePage {
   private navPathStack: NavPathStack = new NavPathStack();
   private controller: PlayerController = PlayerController.getInstance();
   private session: BiliSession = BiliSession.getInstance();
-  // 下拉刷新自定义内容（US6）：params 承载文案状态机与刷新态门控可见性，update() 驱动重渲染
+  // 下拉刷新自定义内容（v0.7-p2 US6）：params 承载文案状态机与刷新态门控可见性，update() 驱动重渲染
   private refreshParams: RefreshHintParams = new RefreshHintParams();
   private refreshContent: ComponentContent<RefreshHintParams> | undefined = undefined;
 
@@ -185,7 +185,7 @@ struct SourcePage {
     return this.seenBefore > 0 && item.pubdate > this.seenBefore;
   }
 
-  // 进出多选统一入口（FR-005）：全链路（行首勾选框宽度/透明度、顶栏双态、底部操作条）
+  // 进出多选统一入口（v0.5-p2-1 FR-005）：全链路（行首勾选框宽度/透明度、顶栏双态、底部操作条）
   // 随同一 animateTo 翻转 selectMode 驱动，进出同入口天然互逆；区间选择态与锚点进出时全量重置
   private enterSelectMode(preselect: string): void {
     if (this.selectMode) {
@@ -219,7 +219,7 @@ struct SourcePage {
     this.selectedKeys = SelectLogic.toggle(this.selectedKeys, bvid);
   }
 
-  // 复选框区拖选（FR-014/FR-018）：方向性扫选——按下采样起点行选中态锁定加/减扫模式，
+  // 复选框区拖选（v0.5-p2-1 FR-014/FR-018）：方向性扫选——按下采样起点行选中态锁定加/减扫模式，
   // 按等高步长换算目标行，起点→目标区间按锁定模式整体 Set 换引用；
   // 手指进入列表边缘带时自动滚动续扫，订阅源触底照常触发加载更早（索引稳定，新载入行可被继续拖选）
   private sweepStep(): number {
@@ -279,7 +279,7 @@ struct SourcePage {
     this.sweepSession = null;
   }
 
-  // 整行拖选（US1 D2）：长按完成翻转起点行并锁定画笔方向（原未选=加扫、原已选=减扫），
+  // 整行拖选（v0.5-p3 US1 D2）：长按完成翻转起点行并锁定画笔方向（原未选=加扫、原已选=减扫），
   // 普通态长按同时进多选（翻转即预选）；ForEach 闭包 index 传递，越界守卫容忍触底加载后的行号漂移
   private beginRowDrag(index: number, event: GestureEvent): void {
     if (index < 0 || index >= this.episodes.length) {
@@ -344,7 +344,7 @@ struct SourcePage {
     }
   }
 
-  // 尽头检测（US1 FR-003/FR-004）：顶部零偏移；底部 isAtEnd 且无可加载更早才算尽头——
+  // 尽头检测（v0.5-p3 US1 FR-003/FR-004）：顶部零偏移；底部 isAtEnd 且无可加载更早才算尽头——
   // canLoadOlder 时滚轮保持空转 tick，触底 onReachEnd 照常触发加载更早，新行追加后自然续滚续选
   private edgeAtEnd(downward: boolean): boolean {
     if (downward) {
@@ -363,11 +363,11 @@ struct SourcePage {
     }, (down: boolean): boolean => this.edgeAtEnd(down));
   }
 
-  // 按列表序取选中剧集批量入队（US2/US3）：先快照选中集再退多选（动画即刻起播，对齐队列/历史
+  // 按列表序取选中剧集批量入队（v0.5-p2-2 US2 / v0.7-p5 US3）：先快照选中集再退多选（动画即刻起播，对齐队列/历史
   // 「先退多选再操作」模式，避免网络耗时吞掉退出动画），复用 loadPlaylistAndPlay 全语义
   // （空队列起播/非空按 insertAfterCurrent 插入当前播放之后或追加队尾，不打断/复合键去重），
   // toast 分型反馈；fav 补全耗时数秒，确认时先弹过程提示、在途重复确认忽略（防重入）；
-  // fav 行数据源无任何标志字段（BILI_NOTES §3.12）：批量入队先经详情链并行补全（修订⑥），
+  // fav 行数据源无任何标志字段（BILI_NOTES §3.12）：批量入队先经详情链并行补全（v0.7-p4 修订⑥），
   // UP 源/合集行自带标志不拉详情
   private enqueueSelected(insertAfterCurrent: boolean): void {
     if (this.enqueueInFlight || this.selectedKeys.size === 0) {
@@ -430,7 +430,7 @@ struct SourcePage {
     return completed;
   }
 
-  // 标记已看完（FR-007）：二次确认（N 动态替换）→ markWatched 批量写本地历史（bvid 级幂等，仅本地）→
+  // 标记已看完（v0.5-p2-1 FR-007）：二次确认（N 动态替换）→ markWatched 批量写本地历史（bvid 级幂等，仅本地）→
   // 重载已播集驱动行上标记立即可见 → toast → 退出多选；取消确认留在多选态无副作用
   private confirmMarkWatched(): void {
     const count: number = this.selectedKeys.size;
@@ -502,7 +502,7 @@ struct SourcePage {
     return 30;
   }
 
-  // FR-009 数据路径兜底：合集/系列剧集接口上游不返回作者（biliRelay 实测），剧集缓存/刷新回填不可行；
+  // v0.5-p3 FR-009 数据路径兜底：合集/系列剧集接口上游不返回作者（biliRelay 实测），剧集缓存/刷新回填不可行；
   // 存量订阅 upperName 为空时经 ownerMid → fetchUpInfo（acc/info→card 降级链）拉取并持久化，失败下次进入再试
   private backfillUpperName(): void {
     if (this.sub.type !== Subscription.TYPE_SEASON && this.sub.type !== Subscription.TYPE_SERIES) {
@@ -570,7 +570,7 @@ struct SourcePage {
     SubscriptionStore.saveSubscriptions(subs);
   }
 
-  // 读内存真相源（controller.playHistory，FR-011）：markWatched 同步更新该数组，
+  // 读内存真相源（controller.playHistory，v0.5-p2-1 FR-011）：markWatched 同步更新该数组，
   // 异步落盘与同步读文件的竞态致已播标记不出现的问题随之消除
   private loadPlayedSet(): void {
     const played: Set<string> = new Set<string>();
@@ -745,9 +745,9 @@ struct SourcePage {
     });
   }
 
-  // 单击路径插入位置受「单集插入位置」设置控制（US3，点击时实时读取生效，
+  // 单击路径插入位置受「单集插入位置」设置控制（v0.7-p1 US3，点击时实时读取生效，
   // 多选按钮为显式参/添加订阅/历史面板不受影响）；
-  // 收藏夹源互动稿豁免拦截（修订⑩）：单击/+ 均随源类型放行
+  // 收藏夹源互动稿豁免拦截（v0.7-p5 修订⑩）：单击/+ 均随源类型放行
   private enqueueAndToast(items: BiliVideo[]): void {
     this.stampFavSource(items);
     const insertAfterCurrent: boolean = AppStore.getNumber(Constants.KEY_SINGLE_INSERT_NEXT, 0) === 1;
@@ -764,7 +764,7 @@ struct SourcePage {
   }
 
   private playEpisode(index: number): void {
-    // US6：点单集仅把该集作为队列播放（与「全部播放」整季连播区分），避免误触发整季连播；
+    // v0-r3 US6：点单集仅把该集作为队列播放（与「全部播放」整季连播区分），避免误触发整季连播；
     // 多P 视频经 fetchVideoDetail 展开全部分P 入队（追加不打断，列表行保持视频级展示），
     // 拉取失败回退占位条目（起播时惰性展开兜底）
     const episode: BiliVideo = this.episodes[index];
@@ -805,7 +805,7 @@ struct SourcePage {
     });
   }
 
-  // 多选底部独立悬浮按钮（FR-016/US2 + v0.8-part4 US7/US8）：不可见全宽 Row 承载三枚独立胶囊——
+  // 多选底部独立悬浮按钮（v0.5-p2-1 FR-016 / v0.5-p3 US2 + v0.8-p4 US7/US8）：不可见全宽 Row 承载三枚独立胶囊——
   // 左「添加至队列末」（accent 底 + fg_on_dark 主按钮，追加队尾；文案去播放顺序歧义，无选中计数，
   // 顶栏「已选 N 项」为计数唯一展示点）/ 中「标记已看完」（card 底 + accent 描边）/
   // 右「下一首播放」（accent 底 + fg_on_dark 主按钮，插至当前播放之后，无计数）；
@@ -897,7 +897,7 @@ struct SourcePage {
     .margin({ bottom: Constants.MINI_PLAYER_CLEARANCE + this.navBarHeight.value })
   }
 
-  // 标题栏双态（FR-001/FR-002）：系统返回钮样式不可定制，hideBackButton 后经自定义 title 重建；
+  // 标题栏双态（v0.5-p2-1 FR-001/FR-002）：系统返回钮样式不可定制，hideBackButton 后经自定义 title 重建；
   // Stack 承载两态 Row 条件渲染 + OPACITY 过渡交叉淡化（进出多选同 animateTo 驱动）——
   // 常规态：返回卡 + 标题 + 多选图标卡（episodeCount===0 不渲染）+ ··· 卡；
   // 多选态：取消卡（xmark 替换返回位）+ 居中「已选 N 项」，···/刷新/退订不可达；
@@ -1015,7 +1015,7 @@ struct SourcePage {
     .padding({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_M })
   }
 
-  // 页头（US3 FR-008/009/010）：List 首个 ListItem 随列表滚动离屏/回顶再现；
+  // 页头（v0.5-p3 US3 FR-008/009/010）：List 首个 ListItem 随列表滚动离屏/回顶再现；
   // 水平 padding 与剧集行同令牌（List S + 行 M），封面左缘与剧集缩略图对齐；
   // 名称大字（displayTitle，合集·前缀已剥）+ 集数同行右对齐 + 标签行（类型胶囊 + UP 主）；
   // 收藏夹不渲染 UP 主行（FR-009），胶囊为类型四色淡底内联实现（单使用点不抽组件）
@@ -1083,7 +1083,7 @@ struct SourcePage {
     .padding({ left: Constants.TOKEN_SPACE_M, right: Constants.TOKEN_SPACE_M, top: Constants.TOKEN_SPACE_XS, bottom: Constants.TOKEN_SPACE_10 })
   }
 
-  // 特殊标记封面 pill（v0.7-part4 R2）：类型色底 + 符号/文字，封面右上角并排互不覆盖；
+  // 特殊标记封面 pill（v0.7-p4 R2）：类型色底 + 符号/文字，封面右上角并排互不覆盖；
   // 大会员无符号、加粗大字即标识；无标志不渲染；多选模式与其他角标一致保持可见
   @Builder
   private markPills(video: BiliVideo) {
@@ -1214,7 +1214,7 @@ struct SourcePage {
               ForEach(this.episodes, (item: BiliVideo, index: number) => {
                 ListItem() {
                   Row() {
-                    // 行首勾选框共用组件（FR-012/FR-013）：恒挂载容器宽度/透明度随 selectMode 动画，
+                    // 行首勾选框共用组件（v0.5-p2-1 FR-012/FR-013）：恒挂载容器宽度/透明度随 selectMode 动画，
                     // 行内容随容器宽度真实让位/回位（非 translate 位移），动画由 enter/exit 的 animateTo 驱动；
                     // 外包 Column 承载复选框区拖选手势（FR-014）：多选态手指在勾选框列上下拖动扫选，
                     // Pan 位移阈值内为点按（Checkbox onChange 切勾不冲突），行其余区域维持列表滚动
@@ -1364,7 +1364,7 @@ struct SourcePage {
                       this.playEpisode(index);
                     }
                   })
-                  // 整行拖选（US1 D2）：Sequence(长按→拖) 常挂两态——普通竖滑未长按不触发归列表滚动；
+                   // 整行拖选（v0.5-p3 US1 D2）：Sequence(长按→拖) 常挂两态——普通竖滑未长按不触发归列表滚动；
                   // 长按翻转起点行进多选/切选，随后拖动区间涂刷（双向画笔，多选态长按已选行起拖为减扫）；
                   // 长按事件取不到触点时回退纯多选预选（不建会话）
                   .gesture(
@@ -1432,7 +1432,7 @@ struct SourcePage {
               .height('100%')
               .id(SWEEP_LIST_ID)
               .padding({ left: Constants.TOKEN_SPACE_S, right: Constants.TOKEN_SPACE_S, top: Constants.TOKEN_SPACE_XS })
-              // MiniPlayer 悬浮化（FR-015）：底部 padding 是内容裁剪边界（内容不能从胶囊下划过的根因），
+              // MiniPlayer 悬浮化（v0.5-p2-1 FR-015）：底部 padding 是内容裁剪边界（内容不能从胶囊下划过的根因），
               // 改挂 contentEndOffset——视口延伸至屏底、内容滚动时从胶囊下方穿过（毛玻璃透出），
               // 滚到底最后一条完整露出在胶囊上方；多选悬浮按钮避让值不变（D18/D19 联动）
               .contentEndOffset(Constants.MINI_PLAYER_CLEARANCE + this.navBarHeight.value)
@@ -1494,12 +1494,12 @@ struct SourcePage {
       this.loadFromCache();
     })
     .onHidden(() => {
-      // US4/FR-008：源页退出（标题栏返回/系统返回/退订 pop 均触发 onHidden）通知首页重算——
+      // v0-r7 US4/FR-008：源页退出（标题栏返回/系统返回/退订 pop 均触发 onHidden）通知首页重算——
       // pushPathByName 的 onPop 仅在 pop(result) 带 result 时才触发（SDK 语义），本应用全部
       // 无参 pop() 故永不回调，徽标返回首页不清除；改经 AppStorage tick 驱动 HomePage @Watch 重建
       connectNum(Constants.AS_HOME_REFRESH_TICK, 0).value = Date.now();
     })
-    // 系统返回层序（FR-010）：先经 BackHandler 自上而下逐层退出（队列/历史多选与面板），
+    // 系统返回层序（v0.5-p2-1 FR-010）：先经 BackHandler 自上而下逐层退出（队列/历史多选与面板），
     // 返回 false 再动画退自身多选，最后放行默认 pop——多层多选同开时先退最上层
     .onBackPressed((): boolean => {
       if (dismissOverlaysForBack()) {

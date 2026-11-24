@@ -6,7 +6,7 @@ import { Appearance } from '../service/Appearance';
 function glassSheetEmptyBody() {
 }
 
-// 通用玻璃浮层容器（v0.4-Part1 sheet-visual-redesign）：遮罩 + 面板壳 + 进出场动画 + 关闭句柄注册，
+// 通用玻璃浮层容器（v0.4-p1-1 sheet-visual-redesign）：遮罩 + 面板壳 + 进出场动画 + 关闭句柄注册，
 // 队列浮层（Index/PlayerOverlay）与播放历史面板（SettingsPage）共用同一实现（FR-008）。
 // 进出场由挂载时 animateTo 驱动的显式位移/透明度状态实现（TransitionEffect.translate
 // 在部分平台 zIndex 场景不可靠，沿用状态驱动）；面板内容经 @BuilderParam body 由宿主注入。
@@ -24,9 +24,9 @@ export struct GlassSheet {
   @BuilderParam body: () => void = glassSheetEmptyBody;
   // 面板垂直位移：进场 '100%'→'0%'，退出反向；translate 百分比相对面板自身高度
   @Local panelOffsetY: string = '100%';
-  // 面板透明度：进场 0→1 与位移同帧驱动，退出镜像反向（FR-006）
+  // 面板透明度：进场 0→1 与位移同帧驱动，退出镜像反向（v0.4-p1-1 FR-006）
   @Local panelOpacity: number = 0;
-  // 生效深浅色（1=浅色 2=深色）：投影参数随外观实时切换（US2）
+  // 生效深浅色（1=浅色 2=深色）：投影参数随外观实时切换（v0.4-p1-1 US2）
   @Local colorModeResolved: NumState =
     connectNum(Constants.AS_COLOR_MODE_RESOLVED, Appearance.MODE_LIGHT);
   private closing: boolean = false;

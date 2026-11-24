@@ -8,7 +8,7 @@ const STABLE_NET_DEBOUNCE_MS: number = 3000;
 
 // 网络类型工具：封装 @kit.NetworkKit connection 能力。
 // isWifi：判定失败（无网络/权限异常/接口异常）一律按「非 Wi-Fi」保守处理，避免误放行流量敏感操作。
-// watchStableNetworkType：默认网络承载类型的稳定变化监听（Wi-Fi/非 Wi-Fi 二值，FR-010 防抖）。
+// watchStableNetworkType：默认网络承载类型的稳定变化监听（Wi-Fi/非 Wi-Fi 二值，audio-quality-settings FR-010 防抖）。
 export class NetUtil {
   // —— 稳定网络类型监听（单例注册，进程生命周期内不注销）——
   private static stableWatchRegistered: boolean = false;

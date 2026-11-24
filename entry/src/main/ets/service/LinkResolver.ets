@@ -3,7 +3,7 @@
 //   ① 分享文案前置抽取（extractBiliUrl）：从混排文本中抽出第一个 B 站域名 http(s) 链接并清除尾随标点；
 //   ② 短链判定与裸域名归一化（isBiliShortLink / normalizeShortLinkUrl）；
 //   ③ 短链解析（resolveShortLink）：rcp 逐跳读 Location（autoRedirect:false，上限 5 跳）——每跳先识别，
-//      第一个可识别 URL 即返回、不再请求（KI-10 修复：autoRedirect 全链跟随只暴露最终 effectiveUrl，
+//      第一个可识别 URL 即返回、不再请求（bili-link-recognize KI-10 修复：autoRedirect 全链跟随只暴露最终 effectiveUrl，
 //      空间分享链首跳 Location m.bilibili.com/space/{mid} 本可识别，链尾却是无 buvid cookie 被踢到的
 //      blackboard 风控中转页，全链跟随导致「目标无法识别」）；目标须为 bilibili.com 域名且可被识别器
 //      分类；会话级 LRU 缓存仅存成功结果；短链路径含视频号时零网络短路；不用 @ohos.net.http：其
@@ -36,14 +36,14 @@ export enum ShortLinkOutcome {
   UNRECOGNIZED = 'unrecognized',
 }
 
-// 短链解析结果：失败时 target 为空、message 为面向用户的中文分型提示（plan.md D4：结果模型而非异常）
+// 短链解析结果：失败时 target 为空、message 为面向用户的中文分型提示（bili-link-recognize plan.md D4：结果模型而非异常）
 export class ShortLinkResult {
   outcome: ShortLinkOutcome = ShortLinkOutcome.OK;
   target: string = '';
   message: string = '';
 }
 
-// —— 链接前置抽取（FR-001 / D9） ——
+// —— 链接前置抽取（bili-link-recognize FR-001 / D9） ——
 
 // 尾随标点清除集：中英文句号/叹号/问号/分号/冒号/右括号/右书名号/引号等（分享文案常见）
 const TRAILING_PUNCTUATION: string = '.,!?;:)]>\'"”，。！？；：）】」』》”’…';
@@ -103,7 +103,7 @@ export function recognizeInput(input: string): RecognizeResult {
     r.page = page;
     return r;
   }
-  // av 号 URL 形态（KI-4 修复 / US4）：bilibili.com/video/av{数字}（忽略大小写，含 m. 等任意子域路径）
+  // av 号 URL 形态（bili-link-recognize KI-4 修复 / US4）：bilibili.com/video/av{数字}（忽略大小写，含 m. 等任意子域路径）
   m = new RegExp('bilibili\\.com/video/av(\\d+)', 'i').exec(trimmed);
   if (m !== null) {
     r.type = 'av';
@@ -111,20 +111,20 @@ export function recognizeInput(input: string): RecognizeResult {
     r.page = page;
     return r;
   }
-  // EP 番剧/影视 URL（v0.6-part4 US2）：bangumi/play/ep|ss 单集/季页，识别为 'ep' 由消费方明确提示暂不支持
+  // EP 番剧/影视 URL（v0.6-p4 US2）：bangumi/play/ep|ss 单集/季页，识别为 'ep' 由消费方明确提示暂不支持
   m = new RegExp('bilibili\\.com/bangumi/play/(?:ep|ss)(\\d+)', 'i').exec(trimmed);
   if (m !== null) {
     r.type = 'ep';
     r.id = m[1];
     return r;
   }
-  // lists 规则（KI-4 修复 / US4）：host 放宽为 bilibili.com 任意子域，路径兼容桌面 {host}/{mid}/lists/{id}
+  // lists 规则（bili-link-recognize KI-4 修复 / US4）：host 放宽为 bilibili.com 任意子域，路径兼容桌面 {host}/{mid}/lists/{id}
   // 与移动端 {host}/space/{mid}/lists/{id} 两种形态；桌面形态行为不变
   m = new RegExp('(?:[0-9A-Za-z-]+\\.)*bilibili\\.com(?:/space)?/(\\d+)/lists/(\\d+)').exec(trimmed);
   if (m !== null) {
     r.ownerMid = m[1];
     r.id = m[2];
-    // type 参数显式定型（KI-7 B3 修复）：无 type 参数不再默认合集，识别为 'lists' 交消费方回退链判定
+    // type 参数显式定型（v0.6-p4 KI-7 B3 修复）：无 type 参数不再默认合集，识别为 'lists' 交消费方回退链判定
     const typeM: RegExpExecArray | null = new RegExp('type=(season|series)').exec(trimmed);
     r.type = typeM !== null ? typeM[1] : 'lists';
     return r;
@@ -151,7 +151,7 @@ export function recognizeInput(input: string): RecognizeResult {
     }
     return r;
   }
-  // fav 收紧（KI-7 B5）：URL path 须含 favlist/medialist 结构性特征（对齐真实收藏夹 URL 形态：
+  // fav 收紧（debt-cleanup KI-7 B5）：URL path 须含 favlist/medialist 结构性特征（对齐真实收藏夹 URL 形态：
   // space.bilibili.com/{mid}/favlist?fid= / m.bilibili.com/space/{mid}/favlist / medialist/play），
   // 且带 fid=/media_id= 参数；文本任意位置含 fav 字样不再作为判定依据
   m = new RegExp('(?:fid|media_id)=(\\d+)').exec(trimmed);
@@ -160,7 +160,7 @@ export function recognizeInput(input: string): RecognizeResult {
     r.id = m[1];
     return r;
   }
-  // UP 空间移动端形态（KI-4 修复 / US2）：host 为 bilibili.com 任意子域（含 m.）的 /space/{数字} 路径
+  // UP 空间移动端形态（bili-link-recognize KI-4 修复 / US2）：host 为 bilibili.com 任意子域（含 m.）的 /space/{数字} 路径
   // （实测空间短链 302 的 Location 形如 https://m.bilibili.com/space/475656353?plat_id=...）
   m = new RegExp('bilibili\\.com/space/(\\d+)').exec(trimmed);
   if (m !== null) {
@@ -174,16 +174,16 @@ export function recognizeInput(input: string): RecognizeResult {
     r.id = m[1];
     return r;
   }
-  // EP 番剧/影视纯文本号（v0.6-part4 US2）：如 ep474556 / ss444417，与 URL 形态统一 'ep'
+  // EP 番剧/影视纯文本号（v0.6-p4 US2）：如 ep474556 / ss444417，与 URL 形态统一 'ep'
   m = new RegExp('^(?:ep|ss)(\\d+)$', 'i').exec(trimmed);
   if (m !== null) {
     r.type = 'ep';
     r.id = m[1];
     return r;
   }
-  // 全文 BV 扫描（KI-7 B4 修复）：无锚定扫描须置于全部 URL 形态规则之后——
+  // 全文 BV 扫描（debt-cleanup KI-7 B4 修复）：无锚定扫描须置于全部 URL 形态规则之后——
   // 首位时会遮蔽含 BV 参数的合集/收藏夹复合 URL；纯 BV 文本不命中任何 URL 规则，落到此处行为不变；
-  // 字符集 base58 收严（KI-7 B8 修复）：真实 BV 由 base58 混淆表生成、不含 0/O/I/l
+  // 字符集 base58 收严（v0.6-p4 KI-7 B8 修复）：真实 BV 由 base58 混淆表生成、不含 0/O/I/l
   m = new RegExp('BV[1-9A-HJ-NP-Za-km-z]{10}').exec(trimmed);
   if (m !== null) {
     r.type = 'bv';
@@ -200,7 +200,7 @@ export function recognizeInput(input: string): RecognizeResult {
   return r;
 }
 
-// —— 短链判定与归一化（FR-002） ——
+// —— 短链判定与归一化（bili-link-recognize FR-002） ——
 
 // 提取 URL 的 host（小写化）；无 http(s) 前缀时返回空串
 function urlHost(url: string): string {
@@ -214,7 +214,7 @@ export function isBiliShortLink(url: string): boolean {
   return host === 'b23.tv' || host === 'bili2233.cn';
 }
 
-// B 站主站域名判定（短链解析最终目标校验，FR-003）：bilibili.com 及任意子域
+// B 站主站域名判定（短链解析最终目标校验，bili-link-recognize FR-003）：bilibili.com 及任意子域
 function isBiliSiteUrl(url: string): boolean {
   const host: string = urlHost(url);
   return host === 'bilibili.com' || host.endsWith('.bilibili.com');
@@ -232,7 +232,7 @@ export function normalizeShortLinkUrl(url: string): string {
   return `https://${trimmed}`;
 }
 
-// —— 短链解析（FR-003 ~ FR-007 / plan.md D1/D3/D4/D6/D7/D8） ——
+// —— 短链解析（bili-link-recognize FR-003 ~ FR-007 / plan.md D1/D3/D4/D6/D7/D8） ——
 
 const SHORT_LINK_MAX_REDIRECTS: number = 5;
 const SHORT_LINK_CACHE_MAX: number = 50;
@@ -263,7 +263,7 @@ function makeError(outcome: ShortLinkOutcome, message: string): ShortLinkResult 
   return r;
 }
 
-// 短链 path 内视频号短路（D7）：如 b23.tv/BV1iMtG6YEyr，path 命中 BV+10 位 base58 字符时
+// 短链 path 内视频号短路（bili-link-recognize D7）：如 b23.tv/BV1iMtG6YEyr，path 命中 BV+10 位 base58 字符时
 // 直接产出视频页目标，零网络请求、不写缓存
 function shortLinkBvTarget(url: string): string {
   const m: RegExpExecArray | null = new RegExp('^https?:\\/\\/[^\\/?#]+([^?#]*)', 'i').exec(url);

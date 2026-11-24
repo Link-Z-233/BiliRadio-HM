@@ -11,16 +11,16 @@ export struct ListRow {
   @Param subtitle: string = '';
   @Param valueText: string = '';
   @Param rowIcon: Resource | undefined = undefined;
-  // 账号行头像（v0.4-Part1-ux-fixes US9）：非空时圆形头像替代图标，加载失败回退 rowIcon
+  // 账号行头像（v0.4-p1-2 US9）：非空时圆形头像替代图标，加载失败回退 rowIcon
   @Param avatarUrl: string = '';
   @Param showArrow: boolean = false;
   @Param showToggle: boolean = false;
   @Param toggleOn: boolean = false;
   @Param showDivider: boolean = false;
   @Param danger: boolean = false;
-  // 大会员徽标（v0.4-Part2 T012）：true 时标题侧渲染「大会员」小标签
+  // 大会员徽标（v0.4-p2 T012）：true 时标题侧渲染「大会员」小标签
   @Param vipBadge: boolean = false;
-  // 选中态（v0.8-part4 US5）：图标与标题主题色高亮 + 行尾 ✓（样式对齐 OptionSheet 主题色 ✓）
+  // 选中态（v0.8-p4 US5）：图标与标题主题色高亮 + 行尾 ✓（样式对齐 OptionSheet 主题色 ✓）
   @Param selected: boolean = false;
   // 图标旋转角（度）：倒序等需旋转区分的模式图标，默认 0 渲染不变
   @Param iconRotate: number = 0;
@@ -28,7 +28,7 @@ export struct ListRow {
     connectStr(Constants.AS_ACCENT_COLOR, Constants.ACCENT_DEFAULT);
   @Param rowAction: () => void = (): void => {};
   @Param toggleChange: (on: boolean) => void = (_on: boolean): void => {};
-  // 行尾自定义槽位（v0.8-part2-settings-regroup）：渲染于 valueText 之后、toggle/arrow 之前；未传零渲染
+  // 行尾自定义槽位（v0.8-p2）：渲染于 valueText 之后、toggle/arrow 之前；未传零渲染
   @BuilderParam trailing: () => void = rowEmptyTrailing;
   @Local isPressed: boolean = false;
   @Local avatarBroken: boolean = false;

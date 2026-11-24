@@ -5,7 +5,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { AppContext } from './AppContext';
 
-// 应用内日志条目（US9）：内存环形缓冲 + 异步落盘。
+// 应用内日志条目（v0-r4 US9）：内存环形缓冲 + 异步落盘。
 // time 为毫秒时间戳；category 取 'net'（网络请求）/ 'error'（错误与风控）/ 'player'（播放链路诊断）；
 // summary 为事件摘要（网络请求记 host+path，已截掉含 cookie/token 的 query string）；
 // result 为结果（'HTTP 200' / 'HTTP 403' / 错误摘要 / '风控页' 等）。
@@ -16,17 +16,17 @@ export class LogEntry {
   result: string = '';
 }
 
-// 日志服务（US9）：全库单点，BiliService 记录网络请求/错误，PlayerController 记录播放链路诊断，
+// 日志服务（v0-r4 US9）：全库单点，BiliService 记录网络请求/错误，PlayerController 记录播放链路诊断，
 // 日志页（LogPage）查询内存缓冲。
 // 内存侧：环形缓冲超限按 Constants.LOG_BUFFER_MAX 淘汰最旧，占用有界；
-// 落盘侧（US9 新增）：每条日志以单行可读格式异步追加写入沙箱 filesDir 下日志文件，
+// 落盘侧（v0-r4 US9 新增）：每条日志以单行可读格式异步追加写入沙箱 filesDir 下日志文件，
 // 文件路径由 EntryAbility.onCreate 调用 init(context) 注入（getContext 在网络回调等非 UI 上下文失效），
 // fire-and-forget 不阻塞主流程，写入 try/catch 兜底（首次失败打一条 hilog 告警后转静默）；
 // 每次（批量）写入前检查文件大小，超 Constants.LOG_FILE_MAX_BYTES 保留最新一半重写（滚动淘汰，字节级有界）；
 // 启动不回读（内存缓冲与文件相互独立）；clear() 仅清内存，不删文件。
 export class Logger {
   private static entries: LogEntry[] = [];
-  // US9：落盘写链——串行化追加，避免并发写交错；链上失败静默后继续接后续写入
+  // v0-r4 US9：落盘写链——串行化追加，避免并发写交错；链上失败静默后继续接后续写入
   private static fileWriteChain: Promise<void> = Promise.resolve();
   // 沙箱日志文件路径缓存（EntryAbility 启动注入 context 后固定；未注入时回退 getContext）
   private static filePathCache: string = '';
@@ -40,7 +40,7 @@ export class Logger {
 
   // 进程启动时由 EntryAbility.onCreate 注入 UIAbilityContext 并解析日志文件路径。
   // getContext() 是 UI 作用域函数（deprecated since 18）：网络回调等无组件上下文的调用点解析失败，
-  // 且失败被静默吞掉——真机自安装起日志文件 0 字节（US9 落盘失效根因），故改为启动期注入进程级 context
+  // 且失败被静默吞掉——真机自安装起日志文件 0 字节（v0-r4 US9 落盘失效根因），故改为启动期注入进程级 context
   // ponytail: debugMode 恢复不走此处 getPreferencesSync（onCreate 阶段读取失败被静默吞），由 SettingsPage 启动时经 AppStore 恢复
   static init(context: common.UIAbilityContext): void {
     try {
@@ -65,7 +65,7 @@ export class Logger {
       const line: string = Logger.buildFileLine(category, summary, result);
       Logger.appendFile(line);
       if (Logger.debugEnabled) {
-        // ponytail: hilog.debug 的 D 级在 API 24 设备被全局过滤不落缓冲，双写须用 info 才可见
+        // ponytail: hilog.debug 的 D 级在部分设备被全局过滤不落缓冲，双写须用 info 才可见
         hilog.info(Constants.LOG_DOMAIN, Constants.LOG_TAG, '%{public}s', line);
       }
     } catch (e) {
@@ -99,7 +99,7 @@ export class Logger {
     return text;
   }
 
-  // —— 以下为 US9 落盘实现（全部静默失败） ——
+  // —— 以下为 v0-r4 US9 落盘实现（全部静默失败） ——
 
   // 沙箱日志文件路径：优先用注入 context 解析的缓存；未注入（init 前调用）时 require 抛错走 catch 返回空。
   // 旧实现仅靠 UI 作用域 getContext()，网络回调上下文中恒失败且被静默，导致落盘从未生效

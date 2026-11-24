@@ -22,7 +22,7 @@ export class FileUtil {
     }
   }
 
-  // 用户文件 URI 读取：分块读整文件（不依赖 statSync 对 user URI 的兼容性，plan D8），异常向上抛
+  // 用户文件 URI 读取：分块读整文件（不依赖 statSync 对 user URI 的兼容性，v0.6-p3 D8），异常向上抛
   static readTextFromUri(uri: string): string {
     const file: fs.File = fs.openSync(uri, fs.OpenMode.READ_ONLY);
     try {

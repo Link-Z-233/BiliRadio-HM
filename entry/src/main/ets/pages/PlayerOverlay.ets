@@ -17,7 +17,7 @@ import { ListRow } from '../component/ListRow';
 
 // 颜色全部使用 base/dark 双份颜色资源：浅色/深色外观下自动匹配（见 resources/base|dark/element/color.json）
 
-// 封面光晕两态参数：静止亮度 / 活动亮度 / 播放态淡入时长（v0.3 US1：原无限呼吸已收敛为一次性过渡）
+// 封面光晕两态参数：静止亮度 / 活动亮度 / 播放态淡入时长（v0.3-r1 US1：原无限呼吸已收敛为一次性过渡）
 const GLOW_IDLE: number = 0.35;
 const GLOW_ACTIVE: number = 0.8;
 const GLOW_FADE_IN_MS: number = 3200;
@@ -76,7 +76,7 @@ export struct PlayerOverlay {
   @Local trackIndex: number = -1;
   @Local playlistCount: number = 0;
   @Local showDetail: boolean = false;
-  // 详情箭头指向（T011）：独立于 showDetail，sheet 任何关闭路径即时翻转
+  // 详情箭头指向（v0-r2 T011）：独立于 showDetail，sheet 任何关闭路径即时翻转
   @Local detailArrowUp: boolean = false;
   @Local sleepTimerActive: boolean = false;
   // 播完暂停模式（queue-redesign US3）：激活时 timer 入口仅图标高亮，不显示剩余数字
@@ -98,7 +98,7 @@ export struct PlayerOverlay {
   private wasPlayIntent: boolean = false;
   // 取色防抖键（palette-glow）：当前已请求取色的 bvid，防重复请求
   private paletteBvid: string = '';
-  // 简介懒加载（T014）：进行中标志防并发；已尝试的 bvid 防重复请求
+  // 简介懒加载（v0-r2 T014）：进行中标志防并发；已尝试的 bvid 防重复请求
   private descLoading: boolean = false;
   private descTriedBvid: string = '';
   private controller: PlayerController = PlayerController.getInstance();
@@ -113,7 +113,7 @@ export struct PlayerOverlay {
     return $r('app.color.text_secondary');
   }
 
-  // ===== 主题色衍生取色（T006）：alpha 沿用 base/dark 资源键原有取值 =====
+  // ===== 主题色衍生取色（v0-r2 T006）：alpha 沿用 base/dark 资源键原有取值 =====
 
   private isDarkMode(): boolean {
     return this.colorModeResolved.value === 2;
@@ -124,7 +124,7 @@ export struct PlayerOverlay {
     return Appearance.hexWithAlpha(this.accentColor.value, 0.349);
   }
 
-  // ===== 播放按钮尺寸同源（US1）：按钮直径为唯一尺寸源，缓冲加载指示与图标字号由此派生 =====
+  // ===== 播放按钮尺寸同源（v0-r3 US1）：按钮直径为唯一尺寸源，缓冲加载指示与图标字号由此派生 =====
 
   // 封面光晕梯度：取色基色（无则主题色） + halo_pink_0..3 原 alpha 序列（浅色 [0x80,0x3D,0x14,0x00] / 深色 [0x66,0x29,0x0D,0x00]）
   private haloColors(): Array<[ResourceColor, number]> {
@@ -188,14 +188,14 @@ export struct PlayerOverlay {
   aboutToAppear(): void {
     this.syncFrom(this.controller);
     this.wasPlayIntent = this.playIntent;
-    // KI-5：挂载期状态变更在 API 24 疑似引发 ModalPage 渲染管线冻结（仅渲染首帧），
-    // 光晕强度初始化延后到构建完成后的下一拍执行，延迟一帧对视觉无感知影响
+    // 光晕强度初始化延后到构建完成后的下一拍（KI-5 遗留防御：挂载帧内同步改状态有渲染时序风险），
+    // 延迟一帧对视觉无感知影响
     setTimeout((): void => {
       this.updateGlow();
     }, 0);
     this.unsubscribePlayer = this.controller.subscribe((): void => {
       this.syncFrom(this.controller);
-      // 光晕强度以意图翻转为动画触发源（US1 意图先行）
+      // 光晕强度以意图翻转为动画触发源（v0.3-r3 US1 意图先行）
       if (this.playIntent !== this.wasPlayIntent) {
         this.wasPlayIntent = this.playIntent;
         this.updateGlow();
@@ -207,19 +207,16 @@ export struct PlayerOverlay {
     this.syncSleepTimer();
   }
 
-  // 进度广播退订句柄（US2/KI-1）：aboutToDisappear 中调用，避免监听器累积截断广播
+  // 进度广播退订句柄（v0-r4 US2/KI-1）：aboutToDisappear 中调用，避免监听器累积截断广播
   private unsubscribePlayer: () => void = (): void => {};
   // 睡眠定时退订句柄（KI-2）：同型修复，避免播放层反复挂载导致秒级回调监听器累积
   private unsubscribeSleepTimer: () => void = (): void => {};
 
   aboutToDisappear(): void {
-    // KI-5：API 24 上 bindContentCover 内容组件挂载后 ~10ms 会收到伪 aboutToDisappear（浮层实际仍显示）。
-    // 此时必须跳过退订，监听器保活才能继续接收 emitUi，否则 @State 冻结在挂载快照、按钮 UI 不再刷新。
-    // 真关闭时 $$ 双向绑定先将 showOverlayActive 置 false，走到这里的退订才是真销毁；
-    // 若真销毁时序反了（先回调后翻转），漏退订的旧监听器由 subscribe 的同 owner 单槽覆盖兜底清理。
+    // 浮层仍显示时跳过退订（KI-5 遗留防御：曾因伪 aboutToDisappear 早退致 @State 冻结在挂载快照）。
+    // 树内条件渲染下 aboutToDisappear 仅在 AS_SHOW_PLAYER_OVERLAY 翻 false 后触发，正常不走此分支；
+    // 若异常触发，漏退订的旧监听器由 subscribe 的同 owner 单槽覆盖兜底清理。
     if (this.showOverlayActive.value) {
-      // KI-5 诊断：API 24 上该伪回调若持续出现且渲染仍冻结，
-      // 则需放弃 bindContentCover（ModalPage）改用树内条件渲染承载播放层
       hilog.info(Constants.LOG_DOMAIN, Constants.LOG_TAG,
         'PlayerOverlay aboutToDisappear skipped: overlay still visible (KI-5 probe)');
       return;
@@ -250,7 +247,7 @@ export struct PlayerOverlay {
     return `${Math.round(this.sleepTimerTotal / 60)} 分钟`;
   }
 
-  // 定时选档生效延迟（FR-014）：生效与收起同帧时，条件插入的「取消定时」红行会被关闭
+  // 定时选档生效延迟（v0.8-p4 FR-014）：生效与收起同帧时，条件插入的「取消定时」红行会被关闭
   // 动画带出（闪红）；收起动画（窄屏 sheet / 宽屏淡出）播完再生效，面板内容冻结
   private applyTimerActionAfterClose(apply: () => void): void {
     this.showSleepTimer.value = false;
@@ -305,7 +302,7 @@ export struct PlayerOverlay {
     }, 0);
   }
 
-  // 详情简介懒加载（T014）：空简介时后台拉取；回填写入队列条目避免下次 syncFrom 覆盖本地态；
+  // 详情简介懒加载（v0-r2 T014）：空简介时后台拉取；回填写入队列条目避免下次 syncFrom 覆盖本地态；
   // 失败静默保留「暂无简介」占位（无 toast），每个 bvid 单次会话内只尝试一次
   private loadTrackDescIfNeeded(): void {
     if (this.descLoading || this.trackDesc !== '' || this.trackBvid === '' ||
@@ -335,7 +332,7 @@ export struct PlayerOverlay {
     this.playIntent = c.playIntent;
     this.currentTime = c.currentTime;
     this.duration = c.duration;
-    // US2：切剧瞬间（controller 进入 preparing）复位拖拽状态，
+    // v0-r4 US2：切剧瞬间（controller 进入 preparing）复位拖拽状态，
     // 避免切剧时正在拖动进度条导致 sliderValue 永久停更
     if (c.isPreparing && this.isSeeking) {
       this.isSeeking = false;
@@ -352,7 +349,7 @@ export struct PlayerOverlay {
     this.playlistCount = c.playlist.length;
     if (c.currentIndex >= 0 && c.currentIndex < c.playlist.length) {
       const item: BiliVideo = c.playlist[c.currentIndex];
-      // US6：大封面按显示尺寸取图，非 Wi-Fi 降省流档（UP 头像保持原图，不参与取档）
+      // v0-r6 US6：大封面按显示尺寸取图，非 Wi-Fi 降省流档（UP 头像保持原图，不参与取档）
       const wifi: boolean = c.isWifiNow();
       const coverW: number = wifi ? Constants.COVER_BIG_W : Constants.COVER_SAVER_W;
       const coverH: number = wifi ? Constants.COVER_BIG_H : Constants.COVER_SAVER_H;
@@ -479,7 +476,7 @@ export struct PlayerOverlay {
     return this.modeRotateOf(this.playMode);
   }
 
-  // 面板行图标四态映射（v0.8-part4 US5 FR-007）：与底栏模式按钮同源，按枚举取图（不依赖当前模式）
+  // 面板行图标四态映射（v0.8-p4 US5 FR-007）：与底栏模式按钮同源，按枚举取图（不依赖当前模式）
   private modeIconOf(mode: MusicPlayMode): Resource {
     if (mode === MusicPlayMode.RANDOM) {
       return $r('sys.symbol.shuffle');
@@ -494,7 +491,7 @@ export struct PlayerOverlay {
     return mode === MusicPlayMode.REVERSE ? 180 : 0;
   }
 
-  // 音质入口按钮短名（T017，替代波形图标）：dash 流式 → 当前音轨码精确档名
+  // 音质入口按钮短名（play-history-progress T017，替代波形图标）：dash 流式 → 当前音轨码精确档名
   // （trackLabel 可显示 Hi-Res/杜比，比按档位归并的 label 更精确）；空闲 → 缓存的上次实际档
   // （无缓存回退当前网络设置默认档）；durl 兜底流 →「默认」（无档位概念）
   private qualityEntryLabel(): string {
@@ -528,7 +525,7 @@ export struct PlayerOverlay {
         .fontColor($r('app.color.text_primary'))
         .margin({ bottom: Constants.TOKEN_SPACE_14 })
 
-      // 行列表化（US5 扩展）：与播放顺序/设置页行视觉统一，当前档主题色高亮 + 行尾 ✓
+      // 行列表化（v0.8-p4 US5 扩展）：与播放顺序/设置页行视觉统一，当前档主题色高亮 + 行尾 ✓
       ForEach(PLAYBACK_RATES, (rate: number) => {
         ListRow({
           title: PlayerController.rateLabel(rate),
@@ -543,14 +540,14 @@ export struct PlayerOverlay {
     }
     .width('100%')
     .padding(Constants.TOKEN_SPACE_20)
-    // 玻璃公式（US3 FR-013）：窄轨 sheet 背景透明，内容根自绘与队列/详情同款面板色+模糊+顶分隔线；
+    // 玻璃公式（v0.8-p4 US3 FR-013）：窄轨 sheet 背景透明，内容根自绘与队列/详情同款面板色+模糊+顶分隔线；
     // 宽轨 overlay 卡片维持现状（属性取空值）
     .backgroundColor(this.isWide ? Color.Transparent : $r('app.color.sheet_panel_background'))
     .backdropBlur(this.isWide ? 0 : Constants.GLASS_BLUR)
     .border({ width: { top: this.isWide ? 0 : 1 }, color: $r('app.color.sheet_top_separator') })
   }
 
-  // 宽屏外壳（v0.8-part4 US3）：mask_heavy + 居中 76% 卡片 + 点击关闭；窄屏同内容走底栏 bindSheet 底部浮窗
+  // 宽屏外壳（v0.8-p4 US3）：mask_heavy + 居中 76% 卡片 + 点击关闭；窄屏同内容走底栏 bindSheet 底部浮窗
   @Builder
   speedPanel() {
     Column() {
@@ -572,7 +569,7 @@ export struct PlayerOverlay {
     })
   }
 
-  // 播放顺序内容（v0.8-part4 US5 FR-007）：ListRow 全宽行列表——行图标四态映射（倒序旋转 180°）、
+  // 播放顺序内容（v0.8-p4 US5 FR-007）：ListRow 全宽行列表——行图标四态映射（倒序旋转 180°）、
   // 行尾 ✓ 标当前模式；宽屏 overlay 与窄屏 sheet 双轨同形
   @Builder
   modePanelContent() {
@@ -599,14 +596,14 @@ export struct PlayerOverlay {
     }
     .width('100%')
     .padding(Constants.TOKEN_SPACE_20)
-    // 玻璃公式（US3 FR-013）：窄轨 sheet 背景透明，内容根自绘与队列/详情同款面板色+模糊+顶分隔线；
+    // 玻璃公式（v0.8-p4 US3 FR-013）：窄轨 sheet 背景透明，内容根自绘与队列/详情同款面板色+模糊+顶分隔线；
     // 宽轨 overlay 卡片维持现状（属性取空值）
     .backgroundColor(this.isWide ? Color.Transparent : $r('app.color.sheet_panel_background'))
     .backdropBlur(this.isWide ? 0 : Constants.GLASS_BLUR)
     .border({ width: { top: this.isWide ? 0 : 1 }, color: $r('app.color.sheet_top_separator') })
   }
 
-  // 宽屏外壳（v0.8-part4 US3）：mask_heavy + 居中 76% 卡片 + 点击关闭；窄屏同内容走底栏 bindSheet 底部浮窗
+  // 宽屏外壳（v0.8-p4 US3）：mask_heavy + 居中 76% 卡片 + 点击关闭；窄屏同内容走底栏 bindSheet 底部浮窗
   @Builder
   modePanel() {
     Column() {
@@ -643,7 +640,7 @@ export struct PlayerOverlay {
         .width('100%')
         .margin({ bottom: Constants.TOKEN_SPACE_6 })
 
-      // 定时面板与底层单选模型对齐（后选取代先选）；选档生效延迟到收起动画之后（FR-014 防闪红）
+      // 定时面板与底层单选模型对齐（后选取代先选）；选档生效延迟到收起动画之后（v0.8-p4 FR-014 防闪红）
       ForEach(Constants.SLEEP_TIMER_PRESETS, (seconds: number) => {
         ListRow({
           title: this.presetLabel(seconds),
@@ -695,14 +692,14 @@ export struct PlayerOverlay {
     }
     .width('100%')
     .padding(Constants.TOKEN_SPACE_20)
-    // 玻璃公式（US3 FR-013）：窄轨 sheet 背景透明，内容根自绘与队列/详情同款面板色+模糊+顶分隔线；
+    // 玻璃公式（v0.8-p4 US3 FR-013）：窄轨 sheet 背景透明，内容根自绘与队列/详情同款面板色+模糊+顶分隔线；
     // 宽轨 overlay 卡片维持现状（属性取空值）
     .backgroundColor(this.isWide ? Color.Transparent : $r('app.color.sheet_panel_background'))
     .backdropBlur(this.isWide ? 0 : Constants.GLASS_BLUR)
     .border({ width: { top: this.isWide ? 0 : 1 }, color: $r('app.color.sheet_top_separator') })
   }
 
-  // 宽屏外壳（v0.8-part4 US3）：mask_heavy + 居中 76% 卡片 + 点击关闭；窄屏同内容走底栏 bindSheet 底部浮窗
+  // 宽屏外壳（v0.8-p4 US3）：mask_heavy + 居中 76% 卡片 + 点击关闭；窄屏同内容走底栏 bindSheet 底部浮窗
   @Builder
   sleepTimerPanel() {
     Column() {
@@ -735,7 +732,7 @@ export struct PlayerOverlay {
         .margin({ bottom: Constants.TOKEN_SPACE_14 })
 
       if (this.currentTrackSource === 'dash' && this.availableTracks.length > 0) {
-        // 行列表化（US5 扩展）：dash 音轨普通行，当前档主题色高亮 + 行尾 ✓
+        // 行列表化（v0.8-p4 US5 扩展）：dash 音轨普通行，当前档主题色高亮 + 行尾 ✓
         ForEach(this.availableTracks, (track: AudioTrack) => {
           ListRow({
             title: AudioQuality.trackLabel(track.id),
@@ -769,14 +766,14 @@ export struct PlayerOverlay {
     }
     .width('100%')
     .padding(Constants.TOKEN_SPACE_20)
-    // 玻璃公式（US3 FR-013）：窄轨 sheet 背景透明，内容根自绘与队列/详情同款面板色+模糊+顶分隔线；
+    // 玻璃公式（v0.8-p4 US3 FR-013）：窄轨 sheet 背景透明，内容根自绘与队列/详情同款面板色+模糊+顶分隔线；
     // 宽轨 overlay 卡片维持现状（属性取空值）
     .backgroundColor(this.isWide ? Color.Transparent : $r('app.color.sheet_panel_background'))
     .backdropBlur(this.isWide ? 0 : Constants.GLASS_BLUR)
     .border({ width: { top: this.isWide ? 0 : 1 }, color: $r('app.color.sheet_top_separator') })
   }
 
-  // 宽屏外壳（v0.8-part4 US3）：mask_heavy + 居中 76% 卡片 + 点击关闭；窄屏同内容走底栏 bindSheet 底部浮窗
+  // 宽屏外壳（v0.8-p4 US3）：mask_heavy + 居中 76% 卡片 + 点击关闭；窄屏同内容走底栏 bindSheet 底部浮窗
   @Builder
   qualityPanel() {
     Column() {
@@ -873,14 +870,14 @@ export struct PlayerOverlay {
     }
     .width('100%')
     .padding(Constants.TOKEN_SPACE_20)
-    // 玻璃公式（US3 FR-013）：窄轨 sheet 背景透明，内容根自绘与队列/详情同款面板色+模糊+顶分隔线；
+    // 玻璃公式（v0.8-p4 US3 FR-013）：窄轨 sheet 背景透明，内容根自绘与队列/详情同款面板色+模糊+顶分隔线；
     // 宽轨 overlay 卡片维持现状（属性取空值）
     .backgroundColor(this.isWide ? Color.Transparent : $r('app.color.sheet_panel_background'))
     .backdropBlur(this.isWide ? 0 : Constants.GLASS_BLUR)
     .border({ width: { top: this.isWide ? 0 : 1 }, color: $r('app.color.sheet_top_separator') })
   }
 
-  // 宽屏外壳（v0.8-part4 US3）：mask_heavy + 居中 76% 卡片 + 点击关闭；窄屏同内容走底栏 bindSheet 底部浮窗
+  // 宽屏外壳（v0.8-p4 US3）：mask_heavy + 居中 76% 卡片 + 点击关闭；窄屏同内容走底栏 bindSheet 底部浮窗
   @Builder
   sleepTimerPicker() {
     Column() {
@@ -942,11 +939,11 @@ export struct PlayerOverlay {
         Text(this.trackDesc !== '' ? this.trackDesc : '暂无简介')
           .fontSize(Constants.TOKEN_FONT_BODY_M)
           .fontColor(this.trackDesc !== '' ? $r('app.color.detail_text') : $r('app.color.text_secondary'))
-          // 行高 token（v0.8-part4 US4 FR-008）：正文多行可读行距，替代裸 24
+          // 行高 token（v0.8-p4 US4 FR-008）：正文多行可读行距，替代裸 24
           .lineHeight(Constants.TOKEN_LINE_HEIGHT_DESC)
           .width('100%')
           .textAlign(TextAlign.Start)
-          // 滚动条专属槽（v0.8-part4 US4）：内容右侧留白承载系统滚动条，滚动条不压简介文字
+          // 滚动条专属槽（v0.8-p4 US4）：内容右侧留白承载系统滚动条，滚动条不压简介文字
           .padding({ right: Constants.TOKEN_SPACE_M })
       }
       .width('100%')
@@ -957,9 +954,9 @@ export struct PlayerOverlay {
     }
     .width('100%')
     .height('100%')
-    // 边距舒展（v0.8-part4 US4）：上边距 XS→M；左右/下已是 TOKEN_SPACE 系最大档 XL 维持
+    // 边距舒展（v0.8-p4 US4）：上边距 XS→M；左右/下已是 TOKEN_SPACE 系最大档 XL 维持
     .padding({ left: Constants.TOKEN_SPACE_XL, right: Constants.TOKEN_SPACE_XL, top: Constants.TOKEN_SPACE_M, bottom: Constants.TOKEN_SPACE_XL })
-    // 玻璃公式（v0.4-Part1-ux-fixes US6）：与队列面板同款面板色+顶部分隔线，blur 作用于 sheet 底色已转透明的下层内容
+    // 玻璃公式（v0.4-p1-2 US6）：与队列面板同款面板色+顶部分隔线，blur 作用于 sheet 底色已转透明的下层内容
     .backgroundColor($r('app.color.sheet_panel_background'))
     .backdropBlur(Constants.GLASS_BLUR)
     .border({ width: { top: 1 }, color: $r('app.color.sheet_top_separator') })
@@ -968,7 +965,7 @@ export struct PlayerOverlay {
   build() {
     Stack() {
       Column() {
-        // US5 骨架修正：顶栏移入滚动内容，Scroll 视口自屏幕顶起算，封面光晕不再被视口顶边截断；
+        // v0.3-r3 US5 骨架修正：顶栏移入滚动内容，Scroll 视口自屏幕顶起算，封面光晕不再被视口顶边截断；
         // 顶栏与封面同组（SpaceBetween 间隙数不变，静止布局逐像素等价）
           Scroll(this.contentScroller) {
             Column() {
@@ -991,13 +988,13 @@ export struct PlayerOverlay {
                 .padding({ left: Constants.TOKEN_SPACE_10, right: Constants.TOKEN_SPACE_10, top: this.statusBarHeight.value + 6, bottom: Constants.TOKEN_SPACE_XS })
 
               Stack() {
-                // 封面环境光晕 — 多段衰减模拟自然光扩散，播放时淡入高亮（v0.3 US1 一次性过渡，无往复）
+                // 封面环境光晕 — 多段衰减模拟自然光扩散，播放时淡入高亮（v0.3-r1 US1 一次性过渡，无往复）
                 Column()
                   .width(450)
                   .height(450)
                   .borderRadius(225)
                   .position({ x: -75, y: -131 })
-                  // v0.4-Part1-ux-fixes US1：光晕 450vp 超出封面 Stack 覆盖上半滚动区，Default 命中拦截顶栏/标题行点击
+                  // v0.4-p1-2 US1：光晕 450vp 超出封面 Stack 覆盖上半滚动区，Default 命中拦截顶栏/标题行点击
                   // （hilog 证据：chevron 点击零 miniChain 链路），None 使纯装饰节点退出命中测试
                   .hitTestBehavior(HitTestMode.None)
                   .opacity(this.glowStrength)
@@ -1032,7 +1029,7 @@ export struct PlayerOverlay {
                     .alignItems(HorizontalAlign.Center)
                   }
 
-                  // 深色蒙层+白前景（v0.8-part4 US2 FR-005）：任意封面明度下可辨，同封面时长角标视觉语言
+                  // 深色蒙层+白前景（v0.8-p4 US2 FR-005）：任意封面明度下可辨，同封面时长角标视觉语言
                   Row({ space: Constants.TOKEN_SPACE_XS }) {
                     SymbolGlyph($r('sys.symbol.play_round_rectangle'))
                       .fontSize(Constants.TOKEN_FONT_BODY_S)
@@ -1080,7 +1077,7 @@ export struct PlayerOverlay {
                   .layoutWeight(1)
 
                 if (this.trackIndex >= 0) {
-                  // 展开指示（v0.4-Part1-ux-fixes US6）：系统图标替换裸「▼」字符，旋转动画保留
+                  // 展开指示（v0.4-p1-2 US6）：系统图标替换裸「▼」字符，旋转动画保留
                   SymbolGlyph($r('sys.symbol.chevron_down'))
                     .fontSize(Constants.TOKEN_FONT_TITLE)
                     .fontColor([this.textSecondary()])
@@ -1160,7 +1157,7 @@ export struct PlayerOverlay {
               }
             }
             .width('100%')
-            // 信息区留白铺满（T007）：内容不足一屏时拉开分布铺满，超出仍可滚动（Scroll 行为不变）；
+            // 信息区留白铺满（v0-r2 T007）：内容不足一屏时拉开分布铺满，超出仍可滚动（Scroll 行为不变）；
             // 底部留白仅宽屏：防止 SpaceBetween 末位子项贴进度条；窄屏无 padding 保持原版逐像素不变
             .constraintSize({ minHeight: '100%' })
             .justifyContent(FlexAlign.SpaceBetween)
@@ -1173,9 +1170,9 @@ export struct PlayerOverlay {
           .scrollBar(BarState.Off)
           .scrollable(ScrollDirection.Vertical)
 
-          // 固定底栏（plan R1）：进度条/时间行/控制栏/底部操作行/状态行常驻底部，不随信息区滚动
+          // 固定底栏（player-redesign plan R1）：进度条/时间行/控制栏/底部操作行/状态行常驻底部，不随信息区滚动
           Column() {
-            // 进度区（spec FR-004 / plan R5）：细进度条 + 独立时间行，宽 92% 居中
+            // 进度区（player-redesign spec FR-004 / plan R5）：细进度条 + 独立时间行，宽 92% 居中
             Column() {
               // 细进度条：轨道高 5vp、圆点直径 12vp；受控 sliderValue + isSeeking 防回弹
               Slider({
@@ -1220,7 +1217,7 @@ export struct PlayerOverlay {
             }
             .width('92%')
 
-            // 控制栏（spec FR-005）：传输五键横排居中，播放键 72×72 主按钮，其余四键次级
+            // 控制栏（player-redesign spec FR-005）：传输五键横排居中，播放键 72×72 主按钮，其余四键次级
             Row({ space: Constants.TOKEN_SPACE_M }) {
               Row() {
                 SymbolGlyph($r('sys.symbol.backward_end_fill'))
@@ -1252,10 +1249,10 @@ export struct PlayerOverlay {
                 this.controller.seekBy(-Constants.SEEK_STEP_MS);
               })
 
-              // 播放键（US1 尺寸同源 / round3 判定表）：三态由三个常驻节点 + opacity 互斥表达——
+              // 播放键（v0-r3 US1 尺寸同源 / v0.3-r3 判定表）：三态由三个常驻节点 + opacity 互斥表达——
               // 缓冲（isPreparing && playIntent）→ 加载圈；playIntent → 暂停键；否则播放键。
               // 常驻节点无创建/销毁、无 symbol 资源切换：此前 if/else 换节点与单节点切资源在
-              // API 24/26 渲染管线残留旧图层（首次播放 glyph→圈→glyph 后播放/暂停同屏、转圈不可见），
+              // API 26 渲染管线残留旧图层（首次播放 glyph→圈→glyph 后播放/暂停同屏、转圈不可见），
               // opacity 方案从根上消除残影来源
               Stack() {
                 LoadingProgress()
@@ -1318,7 +1315,7 @@ export struct PlayerOverlay {
             .alignItems(VerticalAlign.Center)
             .margin({ top: this.isWide ? this.overlayHeightVp * Constants.PLAYER_WIDE_CTRL_GAP_RATIO : Constants.TOKEN_SPACE_M })
 
-            // 底部操作行（spec FR-009）：倍速/定时/音质/播放模式/队列（v0.8-part4 US6 换位），沿用现有全局键开关
+            // 底部操作行（player-redesign spec FR-006）：倍速/定时/音质/播放模式/队列（v0.8-p4 US6 换位），沿用现有全局键开关
             Row({ space: Constants.TOKEN_SPACE_M }) {
               Row({ space: Constants.TOKEN_SPACE_XS }) {
                 SymbolGlyph($r('sys.symbol.speed_multiple'))
@@ -1333,7 +1330,7 @@ export struct PlayerOverlay {
               .onClick(() => {
                 this.showSpeed.value = true;
               })
-              // 窄轨 bindSheet（v0.8-part4 US3）：isShow 取反派生（断点切换即时换形态）；
+              // 窄轨 bindSheet（v0.8-p4 US3）：isShow 取反派生（断点切换即时换形态）；
               // onDisappear 带 !isWide 守卫——断点切宽触发关闭时不清标志，宽屏 overlay 无缝接管
               .bindSheet(!this.isWide && this.showSpeed.value, this.speedPanelContent(), {
                 height: SheetSize.FIT_CONTENT,
@@ -1383,7 +1380,7 @@ export struct PlayerOverlay {
                 }
               })
 
-              // 音质入口（audio-quality-settings FR-005 + T017）：直接显示当前音质档位短名；
+              // 音质入口（audio-quality-settings FR-005 + play-history-progress T017）：直接显示当前音质档位短名；
               // dash 多音轨可用时以主题色高亮示意
               Row() {
                 Text(this.qualityEntryLabel())
@@ -1446,7 +1443,7 @@ export struct PlayerOverlay {
               .onClick(() => {
                 connectBool(Constants.AS_SHOW_QUEUE_SHEET, false).value = true;
               })
-              // 借宿主（v0.8-part4 US3 D4）：单节点单 bindSheet 约束，自定义定时 picker 借队列按钮
+              // 借宿主（v0.8-p4 US3 D4）：单节点单 bindSheet 约束，自定义定时 picker 借队列按钮
               // Row 承载生命周期（BOTTOM sheet 宿主不决定视觉位置）；shouldDismiss 遮罩/下拉关闭回一级
               // 定时面板（对齐宽屏 overlay 点遮罩行为），确认路径不经 shouldDismiss 直接双关
               .bindSheet(!this.isWide && this.showSleepTimerPicker.value, this.sleepTimerPickerContent(), {
@@ -1478,7 +1475,7 @@ export struct PlayerOverlay {
       .layoutWeight(1)
       .padding({ bottom: this.navBarHeight.value + (this.isWide ? this.overlayHeightVp * Constants.PLAYER_WIDE_BOTTOM_GAP_RATIO : 0) })
 
-      // 双轨派生（v0.8-part4 US3）：宽屏条件渲染 overlay，窄屏 bindSheet isShow 取反派生，断点切换即时换形态
+      // 双轨派生（v0.8-p4 US3）：宽屏条件渲染 overlay，窄屏 bindSheet isShow 取反派生，断点切换即时换形态
       if (this.isWide && this.showSpeed.value) {
         this.speedPanel()
       }
@@ -1532,7 +1529,7 @@ export struct PlayerOverlay {
       showClose: false,
       backgroundColor: Color.Transparent,
       preferType: SheetType.BOTTOM,
-      // 手势下滑/遮罩关闭判定通过时：先即时翻转箭头再真正关闭（T011）
+      // 手势下滑/遮罩关闭判定通过时：先即时翻转箭头再真正关闭（v0-r2 T011）
       shouldDismiss: (sheetDismiss: SheetDismiss) => {
         this.detailArrowUp = false;
         sheetDismiss.dismiss();

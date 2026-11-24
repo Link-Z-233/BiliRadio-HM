@@ -34,7 +34,7 @@ export default class EntryAbility extends UIAbility {
     // 进程级 context 注入：全库 deprecated getContext()（UI 作用域，非 UI 调用栈静默失效）统一改经 AppContext 取用
     AppContext.init(this.context);
     // 注入进程级 context 解析日志文件路径：Logger 落盘在网络回调等非 UI 上下文中，
-    // getContext() 解析失败被静默吞掉，真机日志文件自安装起 0 字节（US9 落盘失效根因）
+    // getContext() 解析失败被静默吞掉，真机日志文件自安装起 0 字节（v0-r4 US9 落盘失效根因）
     Logger.init(this.context);
     hilog.info(Constants.LOG_DOMAIN, Constants.LOG_TAG, '%{public}s', 'Ability onCreate');
     this.handleSharedWant(want);
@@ -45,7 +45,7 @@ export default class EntryAbility extends UIAbility {
     this.handleSharedWant(want);
   }
 
-  // 系统分享接收传输层（US5）：onCreate/onNewWant 经 getSharedData 取分享数据（onForeground 取不到，
+  // 系统分享接收传输层（v0.7-p2 US5）：onCreate/onNewWant 经 getSharedData 取分享数据（onForeground 取不到，
   // 官方 FAQ 证实），首条文本记录原文写全局键交 UI 层消费；失败静默记日志不崩；
   // Ability 层零业务逻辑（不引 extractBiliUrl）
   private handleSharedWant(want: Want): void {

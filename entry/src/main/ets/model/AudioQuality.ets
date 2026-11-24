@@ -50,7 +50,7 @@ export class ResolvedAudio {
 }
 
 export class AudioQuality {
-  // 存储值归一（FR-001）：仅接受合法档位值，非法/未初始化（-1）回落 MAX
+  // 存储值归一（audio-quality-settings FR-001）：仅接受合法档位值，非法/未初始化（-1）回落 MAX
   static fromStored(n: number): QualityTier {
     if (n === QualityTier.QHIRES) {
       return QualityTier.QHIRES;
@@ -70,7 +70,7 @@ export class AudioQuality {
     return QualityTier.MAX;
   }
 
-  // 档位可用矩阵（v0.4-Part1-ux-fixes FR-014）：64K 全员 / 132K 登录 / 192K·Hi-Res·杜比 大会员 / 最高语义档恒可选
+  // 档位可用矩阵（v0.4-p1-2 FR-014）：64K 全员 / 132K 登录 / 192K·Hi-Res·杜比 大会员 / 最高语义档恒可选
   static availableTiers(isLogged: boolean, vipStatus: number): QualityTier[] {
     if (isLogged && vipStatus === 1) {
       return [QualityTier.MAX, QualityTier.QHIRES, QualityTier.QDOLBY, QualityTier.Q192K, QualityTier.Q132K, QualityTier.Q64K];
@@ -81,7 +81,7 @@ export class AudioQuality {
     return [QualityTier.MAX, QualityTier.Q64K];
   }
 
-  // 已存档位收敛（US2 场景 4）：不可用档位逐级回落至下方最高可用档（Hi-Res/杜比→192K→132K→64K），
+  // 已存档位收敛（v0.4-p1-2 US2 场景 4）：不可用档位逐级回落至下方最高可用档（Hi-Res/杜比→192K→132K→64K），
   // 仅显示层收敛不落盘
   static clampTier(tier: QualityTier, isLogged: boolean, vipStatus: number): QualityTier {
     if ((tier === QualityTier.QHIRES || tier === QualityTier.QDOLBY) && !(isLogged && vipStatus === 1)) {
@@ -116,7 +116,7 @@ export class AudioQuality {
     return '最高';
   }
 
-  // 音轨码→档位写回映射（FR-004）：Hi-Res(30251)/杜比(30250) 仅能经「最高」档到达，写回 MAX
+  // 音轨码→档位写回映射（audio-quality-settings FR-004）：Hi-Res(30251)/杜比(30250) 仅能经「最高」档到达，写回 MAX
   static tierOfTrackId(id: number): QualityTier {
     if (id === QualityTier.Q192K) {
       return QualityTier.Q192K;
@@ -130,7 +130,7 @@ export class AudioQuality {
     return QualityTier.MAX;
   }
 
-  // 音轨码显示名（US3 面板列表）：未知码回落「默认」
+  // 音轨码显示名（audio-quality-settings US3 面板列表）：未知码回落「默认」
   static trackLabel(id: number): string {
     if (id === 30251) {
       return 'Hi-Res';

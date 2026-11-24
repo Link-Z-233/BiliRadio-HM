@@ -25,7 +25,7 @@ import { AudioQuality, QualityTier } from '../model/AudioQuality';
 
 const QR_CANVAS_SIZE: number = 280;
 
-// 设置页（US8 HarmonyOS 系统风格重写）：大标题 + 分组卡片（SettingsGroup/ListRow），
+// 设置页（v0-r7 US8 HarmonyOS 系统风格重写）：大标题 + 分组卡片（SettingsGroup/ListRow），
 // 登录 / 播放设置 / 外观（含主题色板）/ 播放历史入口 / 日志 / 关于功能全保留；
 // Index 树内层级承载（设置层，导航+胶囊之上、播放浮层之下），历史面板为 Index L4 独立层
 @ComponentV2
@@ -47,9 +47,9 @@ export struct SettingsPage {
   @Local appVersion: string = '';
 
   @Local autoPlayOnStart: boolean = false;
-  // 历史同步开关（v0.5-part1-play-history-sync US4）：读写 KEY_HISTORY_SYNC（默认开），仅登录时展示
+  // 历史同步开关（v0.5-p1-2 US4）：读写 KEY_HISTORY_SYNC（默认开），仅登录时展示
   @Local historySyncOn: boolean = true;
-  // 移除前确认开关（v0.6-part4）：读写 KEY_UNFAVORITE_ASK（默认开），仅登录时展示；关闭后歌单移除纯本地
+  // 移除前确认开关（v0.6-p4）：读写 KEY_UNFAVORITE_ASK（默认开），仅登录时展示；关闭后歌单移除纯本地
   @Local unfavoriteAskOn: boolean = true;
   // —— 新增设置开关状态 ——
   @Local interruptResume: boolean = false;
@@ -59,10 +59,10 @@ export struct SettingsPage {
   @Local cellularQuality: QualityTier = QualityTier.Q132K;
   @Local showQualitySheet: boolean = false;
   @Local qualityEditTarget: string = 'wifi'; // 'wifi' | 'cellular'
-  // 单集插入位置（US3）：true=下一首播放 false=添加至队列末（默认），仅源页单击入队路径生效
+  // 单集插入位置（v0.7-p1 US3）：true=下一首播放 false=添加至队列末（默认），仅源页单击入队路径生效
   @Local singleInsertNext: boolean = false;
   @Local showSingleInsertSheet: boolean = false;
-  // 订阅管理动作弹窗（v0.8-part2 US2）：系统组合并行触发，选项分发导出/导入
+  // 订阅管理动作弹窗（v0.8-p2 US2）：系统组合并行触发，选项分发导出/导入
   @Local showSubManageSheet: boolean = false;
   // 外观三态选中态（0=跟随系统 1=浅色 2=深色）：由 Appearance 写全局键驱动刷新
   @Local colorModeSetting: NumState =
@@ -95,7 +95,7 @@ export struct SettingsPage {
   private pollGeneration: number = 0;
   private controller: PlayerController = PlayerController.getInstance();
   private settingsScroller: Scroller = new Scroller();
-  // 进度广播退订句柄（US2/KI-1）：aboutToDisappear 中调用，避免监听器累积
+  // 进度广播退订句柄（v0-r4 US2/KI-1）：aboutToDisappear 中调用，避免监听器累积
   private unsubscribePlayer: () => void = (): void => {};
   private tapCount: number = 0;
   private lastTapTs: number = 0;
@@ -115,7 +115,7 @@ export struct SettingsPage {
     this.unsubscribePlayer = this.controller.subscribe((): void => {
       this.refreshLoginState();
     }, 'SettingsPage');
-    // debugMode 开关显示：仅读 AppStore 供 UI；Logger 恢复与启动提醒已前移 Index 冷启动链路（v0.4-Part1-ux-fixes US10）
+    // debugMode 开关显示：仅读 AppStore 供 UI；Logger 恢复与启动提醒已前移 Index 冷启动链路（v0.4-p1-2 US10）
     this.debugModeOn = AppStore.getNumber(Constants.KEY_DEBUG_MODE, 0) === 1;
     registerSettingsBack((): boolean => {
       if (this.showSubManageSheet) {
@@ -139,7 +139,7 @@ export struct SettingsPage {
   }
 
   aboutToDisappear(): void {
-    // 设置层关闭（Index 条件渲染卸载）= 回首页时刻（⑭）：bump 既有键驱动首页重算 + 1 小时 CD 门内静默刷新尝试
+    // 设置层关闭（Index 条件渲染卸载）= 回首页时刻（v0.5-p4 ⑭）：bump 既有键驱动首页重算 + 1 小时 CD 门内静默刷新尝试
     connectNum(Constants.AS_HOME_REFRESH_TICK, 0).value = Date.now();
     registerSettingsBack(undefined);
     this.unsubscribePlayer();
@@ -171,12 +171,12 @@ export struct SettingsPage {
     return AudioQuality.fromStored(stored);
   }
 
-  // 档位选择器可选项（v0.4-Part1-ux-fixes FR-014）：按登录+会员态过滤；nav 失败时 vipStatus 保持 0 按非会员
+  // 档位选择器可选项（v0.4-p1-2 FR-014）：按登录+会员态过滤；nav 失败时 vipStatus 保持 0 按非会员
   private qualityOptions(): QualityTier[] {
     return AudioQuality.availableTiers(this.isLogged, BiliSession.getInstance().vipStatus);
   }
 
-  // 当前编辑项的已存档位（选择器 ✓ 高亮依据）：不可用档位显示层收敛（US2 场景 4）
+  // 当前编辑项的已存档位（选择器 ✓ 高亮依据）：不可用档位显示层收敛（v0.4-p1-2 US2 场景 4）
   private currentEditTier(): QualityTier {
     const stored: QualityTier = this.qualityEditTarget === 'wifi' ? this.wifiQuality : this.cellularQuality;
     return AudioQuality.clampTier(stored, this.isLogged, BiliSession.getInstance().vipStatus);
@@ -187,7 +187,7 @@ export struct SettingsPage {
     this.showQualitySheet = true;
   }
 
-  // 选中档位：putNumber 立即持久化（FR-001），刷新副标题后关闭选择器
+  // 选中档位：putNumber 立即持久化（audio-quality-settings FR-001），刷新副标题后关闭选择器
   private applyQualityTier(tier: QualityTier): void {
     if (this.qualityEditTarget === 'wifi') {
       this.wifiQuality = tier;
@@ -199,7 +199,7 @@ export struct SettingsPage {
     this.showQualitySheet = false;
   }
 
-  // —— 单集插入位置（US3）——
+  // —— 单集插入位置（v0.7-p1 US3）——
 
   private singleInsertLabel(): string {
     return this.singleInsertNext ? '下一首播放' : '添加至队列末';
@@ -269,7 +269,7 @@ export struct SettingsPage {
     connectBool(Constants.AS_SHOW_LOG_PAGE, false).value = true;
   }
 
-  // —— 订阅导入导出（v0.6-part3 US2/US3）——
+  // —— 订阅导入导出（v0.6-p3 US2/US3）——
 
   // 导出订阅：空列表拦截 → cacheDir 覆盖写 → fileUri 转 URI → systemShare 分享面板（单选模式）
   private shareSubscriptions(): void {
@@ -324,7 +324,7 @@ export struct SettingsPage {
         return;
       }
       // 新订阅串行拉取（导入链自拉数据，不经 CD），完成/失败后 bump 令首页重算显示封面剧集；
-      // 回首页的刷新时机由 SettingsPage.aboutToDisappear 关闭 bump 承担（⑭，1 小时 CD 门收敛）
+      // 回首页的刷新时机由 SettingsPage.aboutToDisappear 关闭 bump 承担（v0.5-p4 ⑭，1 小时 CD 门收敛）
       const tick: NumState = connectNum(Constants.AS_HOME_REFRESH_TICK, 0);
       SubscriptionStore.refreshAll(result.newSubs, true, (sub: Subscription, ok: boolean): void => {
         if (ok) {
@@ -340,7 +340,7 @@ export struct SettingsPage {
     }
   }
 
-  // 外链统一跳转（US7）：四链接复用——二次确认后 openLink 拉起系统浏览器，失败 toast
+  // 外链统一跳转（v0.4-p1-2 US7）：四链接复用——二次确认后 openLink 拉起系统浏览器，失败 toast
   private confirmOpenLink(url: string): void {
     const ctx = AppContext.require();
     this.getUIContext().showAlertDialog({
@@ -603,7 +603,7 @@ export struct SettingsPage {
     }
   }
 
-  // US7/FR-016：登出二次确认，取消不登出；确认后 logout 首行 stopPoll 停止轮询中的登录流程
+  // v0-r6 US7/FR-016：登出二次确认，取消不登出；确认后 logout 首行 stopPoll 停止轮询中的登录流程
   private confirmLogout(): void {
     this.getUIContext().showAlertDialog({
       title: '退出登录',
@@ -692,7 +692,7 @@ export struct SettingsPage {
     })
   }
 
-  // 未登录账号区：一键登录/扫码登录按钮 + 二维码块（US8 卡片内布局）
+  // 未登录账号区：一键登录/扫码登录按钮 + 二维码块（v0-r7 US8 卡片内布局）
   @Builder
   private loginControls() {
     Column() {
@@ -808,7 +808,7 @@ export struct SettingsPage {
     .padding({ left: Constants.TOKEN_SPACE_14, right: Constants.TOKEN_SPACE_14, top: Constants.TOKEN_SPACE_14, bottom: Constants.TOKEN_SPACE_14 })
   }
 
-  // 手动粘贴 Cookie（US8 卡片内布局）
+  // 手动粘贴 Cookie（v0-r7 US8 卡片内布局）
   @Builder
   private cookieBlock() {
     Column() {
@@ -868,7 +868,7 @@ export struct SettingsPage {
     .alignItems(VerticalAlign.Top)
   }
 
-  // 「关于」弹窗（v0.4-Part1-ux-fixes US7 重写）：FR-009 确切文案，四链接二次确认跳浏览器
+  // 「关于」弹窗（v0.4-p1-2 US7 重写）：FR-009 确切文案，四链接二次确认跳浏览器
   @Builder
   aboutSheet() {
     Column() {
@@ -1028,7 +1028,7 @@ export struct SettingsPage {
     })
   }
 
-  // 登出胶囊（v0.8-part2 US1）：用户行行尾两字胶囊，中性淡底 + danger_red 文字，点击走既有确认弹窗
+  // 登出胶囊（v0.8-p2 US1）：用户行行尾两字胶囊，中性淡底 + danger_red 文字，点击走既有确认弹窗
   @Builder
   logoutPill() {
     Button('登出')
@@ -1061,7 +1061,7 @@ export struct SettingsPage {
     })
   }
 
-  // 关于页项目地址行（US7）：label + URL 一行，点击走统一外链确认
+  // 关于页项目地址行（v0.4-p1-2 US7）：label + URL 一行，点击走统一外链确认
   @Builder
   aboutLinkRow(label: string, url: string) {
     Row({ space: Constants.TOKEN_SPACE_S }) {
@@ -1337,7 +1337,7 @@ export struct SettingsPage {
             .alignItems(HorizontalAlign.Start)
             .padding({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_L, top: Constants.TOKEN_SPACE_XXS,
               bottom: this.navBarHeight.value + Constants.TOKEN_SPACE_L })
-            // ponytail: about 的 bindSheet 挂外层根 Column 或内层链首位时在 API 24 平板打开即自动关闭；单挂内容容器（HEAD 版 logSheet 同款宿主）稳定
+            // ponytail: about 的 bindSheet 挂外层根 Column 或内层链首位时打开即自动关闭（早期平板实测）；单挂内容容器（HEAD 版 logSheet 同款宿主）稳定
             .bindSheet(this.showAbout, this.aboutSheet(), {
               height: '75%',
               dragBar: true,

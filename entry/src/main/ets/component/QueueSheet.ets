@@ -25,7 +25,7 @@ const EST_PART_ROW_HEIGHT: number = 36;
 // 拖选边缘带定位用 List 组件 id（checkSweepEdge 与 .id() 同源）
 const SWEEP_LIST_ID: string = 'queueSheetList';
 
-// 展示条目（plan D1）：队列渲染与交互的最小单位，随 playlistVersion 整体重建、不落盘。
+// 展示条目（queue-multi-p-item plan D1）：队列渲染与交互的最小单位，随 playlistVersion 整体重建、不落盘。
 // 组条目 = 相邻（≥2）同 bvid 且页号≥1 的分P（头行+分P 窄行同属一个 ListItem、一体滑动）；
 // 单条目 = 单P/孤立分P/占位整行。组内扁平下标 = startIndex + 组内偏移
 class QueueEntry {
@@ -79,7 +79,7 @@ function sameEntryVideos(a: QueueEntry, b: QueueEntry): boolean {
   return true;
 }
 
-// 队列条目 diff（plan D2）：next 可由 old 纯删除得到时返回被删下标（升序），
+// 队列条目 diff（queue-multi-p-item plan D2）：next 可由 old 纯删除得到时返回被删下标（升序），
 // 否则（增长/重排/组分裂/组缩减）返回 undefined，调用方走整表 reload；相等返回空数组（no-op）
 function diffRemovedEntries(old: QueueEntry[], next: QueueEntry[]): number[] | undefined {
   const removed: number[] = [];
@@ -160,24 +160,24 @@ class PlaylistDataSource implements IDataSource {
 export struct QueueSheet {
   @Local entries: QueueEntry[] = [];
   // 当前条目复合键（非下标）：LazyForEach 同键节点跨 reload 复用不重跑生成器闭包，
-  // 重排后闭包内位置量（startIndex/下标）过期，键比对免疫（同 v0.4-fix-multi-part bugfix #1 闭包过期类）
+  // 重排后闭包内位置量（startIndex/下标）过期，键比对免疫（同 fix-multi-part bugfix #1 闭包过期类）
   @Local currentKey: string = '';
   @Local playlistVersion: number = -1;
   @Local selectMode: BoolState = connectBool(Constants.AS_PLAYLIST_SELECT_MODE, false);
   // 多选集合不可变整体换引用更新：V2 @Local 赋值观测不观测 Set 内部变更
   @Local selectedKeys: Set<string> = new Set<string>();
-  // 移动飞越（US1）：被移动条目键集，飞行期间 zIndex 抬升盖在其他条目之上，动画结束重赋值清空
+  // 移动飞越（v0.7-p1 US1）：被移动条目键集，飞行期间 zIndex 抬升盖在其他条目之上，动画结束重赋值清空
   @Local flightKeys: Set<string> = new Set<string>();
-  // 长按气泡提示（US6）：当前弹气泡的按钮键（单态互斥），onStateChange 气泡消失时清空防残留
+  // 长按气泡提示（v0.7-p1 US6）：当前弹气泡的按钮键（单态互斥），onStateChange 气泡消失时清空防残留
   @Local popupTip: string = '';
   @Local pressedKey: string = '';
-  // 面板显隐同源（v0.3 US7）：与 GlassSheet/Index 共享同键实例，关闭时驱动多选复位
+  // 面板显隐同源（v0.3-r1 US7）：与 GlassSheet/Index 共享同键实例，关闭时驱动多选复位
   @Local showQueueSheet: BoolState = connectBool(Constants.AS_SHOW_QUEUE_SHEET, false);
 
   @Local pageHeight: number = 0;
   @Local headerHeight: number = 72;
 
-  // 主题色（T016）：强调色运行时跟随外观设置（Appearance 写入 AppStorage），衍生色一律经 hexWithAlpha
+  // 主题色（play-history-progress T016）：强调色运行时跟随外观设置（Appearance 写入 AppStorage），衍生色一律经 hexWithAlpha
   @Local accentColor: StrState =
     connectStr(Constants.AS_ACCENT_COLOR, Constants.ACCENT_DEFAULT);
   private controller: PlayerController = PlayerController.getInstance();
@@ -195,17 +195,17 @@ export struct QueueSheet {
   }
 
   private listSource: PlaylistDataSource = new PlaylistDataSource();
-  // ListScroller（extends Scroller）：取消确认后经 closeAllSwipeActions 复位滑动行（US1）
+  // ListScroller（extends Scroller）：取消确认后经 closeAllSwipeActions 复位滑动行（v0.3-r2 US1）
   private listScroller: ListScroller = new ListScroller();
   // 拖选起始条目下标（长按进入多选时记录，Pan 拖选换算起点）
   private dragStartEntryIndex: number = -1;
-  // 长按守卫（FR-009）：堵 Sequence 组失败后的回退 onClick 取消预选，拖选路径不受影响
+  // 长按守卫（v0.5-p2-1 FR-009）：堵 Sequence 组失败后的回退 onClick 取消预选，拖选路径不受影响
   private longPressGuard: LongPressGuard = new LongPressGuard();
-  // 复选框区拖选会话（FR-014）：null=未在拖选；方向性扫选模式按下时锁定，同次拖动不反转
+  // 复选框区拖选会话（v0.5-p2-1 FR-014）：null=未在拖选；方向性扫选模式按下时锁定，同次拖动不反转
   private sweepSession: SweepSession | null = null;
-  // 边缘自动滚动器（FR-018）：拖选中手指进入列表可视区边缘带时驱动列表滚动续扫
+  // 边缘自动滚动器（v0.5-p2-1 FR-018）：拖选中手指进入列表可视区边缘带时驱动列表滚动续扫
   private edgeScroller: EdgeAutoScroller = new EdgeAutoScroller();
-  // 进度广播退订句柄（US2/KI-1）：aboutToDisappear 中调用，避免监听器累积
+  // 进度广播退订句柄（v0-r4 US2/KI-1）：aboutToDisappear 中调用，避免监听器累积
   private unsubscribePlayer: () => void = (): void => {};
 
   aboutToAppear(): void {
@@ -224,7 +224,7 @@ export struct QueueSheet {
     registerQueueSelectExit(undefined);
   }
 
-  // 面板关闭（遮罩/返回/滑出任一方式）自动退出多选（v0.3 US7 FR-009）
+  // 面板关闭（遮罩/返回/滑出任一方式）自动退出多选（v0.3-r1 US7 FR-009）
   @Monitor('showQueueSheet.value')
   onQueueSheetVisibilityChanged(): void {
     if (!this.showQueueSheet.value) {
@@ -232,13 +232,13 @@ export struct QueueSheet {
     }
   }
 
-  // 多选退出即清选中（v0.3 US7）：外部（Index 系统返回）仅翻转 selectMode，选中项由本侧复位
+  // 多选退出即清选中（v0.3-r1 US7）：外部（Index 系统返回）仅翻转 selectMode，选中项由本侧复位
   @Monitor('selectMode.value')
   onSelectModeChanged(): void {
     if (!this.selectMode.value) {
       this.selectedKeys = new Set<string>();
     } else {
-      // 进入多选即收起已滑出的行（v0.4-Part1-ux-fixes US5）：多选态不再挂载左滑删除动作
+      // 进入多选即收起已滑出的行（v0.4-p1-2 US5）：多选态不再挂载左滑删除动作
       this.listScroller.closeAllSwipeActions();
     }
   }
@@ -266,7 +266,7 @@ export struct QueueSheet {
           this.listSource.notifyDataDelete(removed[i]);
         }
         this.entries = next;
-        // 删除后强制重绑（bugfix #1 机制保留）：从最低删除位扫到末尾，
+        // 删除后强制重绑（fix-multi-part bugfix #1 机制保留）：从最低删除位扫到末尾，
         // 防止缓存条目闭包 index 过期（LazyForEach 使用 index 参数时删除后框架不保证重绑）
         if (removed.length > 0) {
           for (let i = removed[removed.length - 1]; i < next.length; i++) {
@@ -304,7 +304,7 @@ export struct QueueSheet {
     return `P${item.page} ${name}`;
   }
 
-  // 组头点击两段判定（plan D4，沿第三轮 D13）：① latestHistoryOf 有历史 → 目标 = 最新 viewAt 分P
+  // 组头点击两段判定（queue-multi-p-item plan D4，沿 fix-multi-part D13）：① latestHistoryOf 有历史 → 目标 = 最新 viewAt 分P
   // （续播其历史进度）；② 无历史 → 目标 = 条目内最小 page 条目（通常 P1，从头播）。目标在队列内
   // （复合键匹配，占位 0≡1）复用既有跳播入口；队外（仅①可能）以该历史条目元数据构造分P 条目
   // 走 playDownloadedSong 插播
@@ -362,7 +362,7 @@ export struct QueueSheet {
     return -1;
   }
 
-  // 队外目标插播（D13 回退语义）：以历史条目元数据构造分P 条目走既有历史点播路径（播完回原当前条目）
+  // 队外目标插播（fix-multi-part D13 回退语义）：以历史条目元数据构造分P 条目走既有历史点播路径（播完回原当前条目）
   private playHistoryEntry(entry: PlayHistoryItem): void {
     const v: BiliVideo = BiliVideo.create(entry.bvid, 0, entry.cid, entry.title, entry.cover, entry.duration);
     v.ownerName = entry.ownerName;
@@ -376,7 +376,7 @@ export struct QueueSheet {
     this.controller.playDownloadedSong(v);
   }
 
-  // 条目全部分P 复合键（plan D3）：确认移除时把选中条目键展开为分P 键，
+  // 条目全部分P 复合键（queue-multi-p-item plan D3）：确认移除时把选中条目键展开为分P 键，
   // 走既有 removeSelectedFromPlaylist（存储删除保持分P 粒度，索引修正/自动切播/持久化零改动）
   private entryPartKeys(entry: QueueEntry): string[] {
     const keys: string[] = [];
@@ -410,7 +410,7 @@ export struct QueueSheet {
     }
   }
 
-  // 长按拖动范围选（plan D5）：from..to 区间内条目整条目选中（组键/单键，只增不减）
+  // 长按拖动范围选（queue-multi-p-item plan D5）：from..to 区间内条目整条目选中（组键/单键，只增不减）
   private selectRange(from: number, to: number): void {
     const lo: number = Math.max(0, Math.min(from, to));
     const hi: number = Math.min(this.entries.length - 1, Math.max(from, to));
@@ -428,7 +428,7 @@ export struct QueueSheet {
     }
   }
 
-  // 拖选位移换算目标条目（plan D5）：从起始条目按条目估算高度累积换算（组条目高度可变），
+  // 拖选位移换算目标条目（queue-multi-p-item plan D5）：从起始条目按条目估算高度累积换算（组条目高度可变），
   // 取代定值高度换算；估算保守只影响拖选效率
   private targetEntryIndex(start: number, offsetY: number): number {
     let idx: number = start;
@@ -460,7 +460,7 @@ export struct QueueSheet {
     return idx;
   }
 
-  // 复选框区拖选（FR-014/FR-018）：方向性扫选——按下采样起点条目选中态锁定加/减扫模式，
+  // 复选框区拖选（v0.5-p2-1 FR-014/FR-018）：方向性扫选——按下采样起点条目选中态锁定加/减扫模式，
   // 按条目估算高度换算目标条目（组条目高度可变，复用既有 targetEntryIndex），
   // 起点→目标区间按锁定模式整体 Set 换引用；手指进入列表边缘带时自动滚动续扫；
   // 与行级 Sequence 长按拖选（只增不减）并存，二者手势热区互斥（勾选框列 vs 行主体）
@@ -542,7 +542,7 @@ export struct QueueSheet {
     this.selectedKeys = new Set<string>();
   }
 
-  // 进出多选统一动画入口（FR-006）：行首勾选框宽度/透明度与头部双态随同一 animateTo 翻转
+  // 进出多选统一动画入口（v0.5-p2-1 FR-006）：行首勾选框宽度/透明度与头部双态随同一 animateTo 翻转
   // selectMode 驱动，进出互逆；动画中断终态以 selectMode 状态为准
   private enterSelectMode(): void {
     this.getUIContext().animateTo({ duration: Constants.TOKEN_SELECT_ANIM_MS, curve: Curve.EaseOut }, (): void => {
@@ -556,7 +556,7 @@ export struct QueueSheet {
     });
   }
 
-  // 多选移除（US2）：二次确认防误触；确认后选中条目键展开为分P 键批量移除（US6 补位动画）
+  // 多选移除（v0.3-r2 US2）：二次确认防误触；确认后选中条目键展开为分P 键批量移除（US6 补位动画）
   private removeSelected(): void {
     const count: number = this.selectedKeys.size;
     if (count === 0) {
@@ -594,7 +594,7 @@ export struct QueueSheet {
     });
   }
 
-  // 批量移动（US1）：收集选中条目扁平下标（单条目=起始下标、组条目=startIndex 起全区间）→
+  // 批量移动（v0.7-p1 US1）：收集选中条目扁平下标（单条目=起始下标、组条目=startIndex 起全区间）→
   // animateTo 闭包内 moveFlatItems 就地重排（不打断播放）+ 成功（>0）即裸退多选（endSweep +
   // selectMode 翻转 + 清选中，无动画壳）——勾选框收起/头部双态切换与飞越同一起点同参数同步驱动；
   // 被移动条目飞行期间 zIndex 抬升盖在其他条目之上（条目键稳定，节点复用参与动画）；
@@ -633,7 +633,7 @@ export struct QueueSheet {
     });
   }
 
-  // 左滑单条目删除确认（US1 双触发）：点垃圾桶/滑过阈值均进本弹窗；确认后按分P 键走既有
+  // 左滑单条目删除确认（v0.3-r2 US1 双触发）：点垃圾桶/滑过阈值均进本弹窗；确认后按分P 键走既有
   // 批量移除链路（含当前条目自动切播语义），UI 刷新交由 syncFrom 的 diff 增量通知；
   // 取消/点外围经 closeAllSwipeActions 复位收起滑动行
   private confirmRemoveQueueItem(entry: QueueEntry): void {
@@ -663,7 +663,7 @@ export struct QueueSheet {
     });
   }
 
-  // 左滑组条目整组移除确认（plan D6）：确认弹窗标注整组分P 数防误触；
+  // 左滑组条目整组移除确认（queue-multi-p-item plan D6）：确认弹窗标注整组分P 数防误触；
   // 确认后走既有批量移除链路（含当前条目自动切播）
   private confirmRemoveGroup(entry: QueueEntry): void {
     const keys: string[] = this.entryPartKeys(entry);
@@ -696,7 +696,7 @@ export struct QueueSheet {
     });
   }
 
-  // 清除已播（US3）：无可清 toast 不弹框；可清时按可清计数（条目口径，plan D7）二次确认
+  // 清除已播（v0.3-r2 US3）：无可清 toast 不弹框；可清时按可清计数（条目口径，queue-multi-p-item plan D7）二次确认
   private confirmClearPlayed(): void {
     const count: number = this.controller.playedRemovableCount();
     if (count === 0) {
@@ -725,7 +725,7 @@ export struct QueueSheet {
     });
   }
 
-  // 清空队列（R3 US4）：移除全部条目（含当前播放），二次确认防误触（计数为条目口径，plan D7）；
+  // 清空队列（v0.3-r3 US4）：移除全部条目（含当前播放），二次确认防误触（计数为条目口径，queue-multi-p-item plan D7）；
   // 确认后两层同收（closeBothLayersNow）+ 停声先行、延时清数据（clearAllWithExitDelay）
   private clearQueue(): void {
     if (this.entries.length === 0) {
@@ -773,7 +773,7 @@ export struct QueueSheet {
     ];
   }
 
-  // 左滑露出的红色垃圾桶删除钮（US1 双触发）：点击进确认弹窗，滑过阈值（onAction）同弹窗；
+  // 左滑露出的红色垃圾桶删除钮（v0.3-r2 US1 双触发）：点击进确认弹窗，滑过阈值（onAction）同弹窗；
   // 组条目按整组移除弹窗（标注分P 数），单条目按单删确认
   @Builder
   queueDeleteAction(entry: QueueEntry) {
@@ -801,14 +801,14 @@ export struct QueueSheet {
     .padding({ left: Constants.TOKEN_SPACE_M, right: Constants.TOKEN_SPACE_M })
   }
 
-  // 组条目视频头行（plan D4/D9）：封面 + 视频标题 + 共 nP 独占一行；多选态行首恒挂载 Checkbox
+  // 组条目视频头行（queue-multi-p-item plan D4/D9）：封面 + 视频标题 + 共 nP 独占一行；多选态行首恒挂载 Checkbox
   // 容器（宽度/透明度随 selectMode 动画，整组切换，选择单位=条目）；
   // 按压高亮 + 长按进多选（选中本组条目）+ Pan 拖选与单条目整行同构；
   // 非多选点击整组续播（两段判定），多选点击整组切换
   @Builder
   videoHeaderRow(entry: QueueEntry) {
     Row() {
-      // 勾选框区拖选（FR-014）：外包 Column 承载扫选手势，热区限勾选框列，
+      // 勾选框区拖选（v0.5-p2-1 FR-014）：外包 Column 承载扫选手势，热区限勾选框列，
       // 行主体 Sequence 拖选（只增不减）与勾选框扫选（可加可减）并存互不冲突
       Column() {
         SelectCheckbox({
@@ -906,7 +906,7 @@ export struct QueueSheet {
     )
   }
 
-  // 特殊标记标题前缀（v0.7-part4 R2）：充电/互动/付费图标、大会员「大」单字，与行尾 ✓/X/! 分位，
+  // 特殊标记标题前缀（v0.7-p4 R2）：充电/互动/付费图标、大会员「大」单字，与行尾 ✓/X/! 分位，
   // 多选模式不隐藏（用户决策，与历史面板取齐）
   @Builder
   specialMarkPrefix(video: BiliVideo) {
@@ -938,9 +938,9 @@ export struct QueueSheet {
     }
   }
 
-  // 组条目分P 窄行（plan D9）：无封面，Pn + 分P 标题 + 时长，左缩进对齐头行标题；
+  // 组条目分P 窄行（queue-multi-p-item plan D9）：无封面，Pn + 分P 标题 + 时长，左缩进对齐头行标题；
   // 点击切播与当前播放高亮均按复合键实时解析（同 currentKey 字段注释）；多选点击/长按均为整条目（组）语义；
-  // 已播 ✓ 分P 粒度（(bvid,page) 命中历史 -1）；拖选/按压与头行同构（组为最小管理粒度，D15-Trim 语义保持）
+  // 已播 ✓ 分P 粒度（(bvid,page) 命中历史 -1）；拖选/按压与头行同构（组为最小管理粒度，fix-multi-part D15-Trim 语义保持）
   @Builder
   queuePartRow(part: BiliVideo, entry: QueueEntry) {
     Row() {
@@ -1031,7 +1031,7 @@ export struct QueueSheet {
   @Builder
   queueFullRow(entry: QueueEntry) {
     Row() {
-      // 勾选框区拖选（FR-014）：外包 Column 承载扫选手势，热区限勾选框列，
+      // 勾选框区拖选（v0.5-p2-1 FR-014）：外包 Column 承载扫选手势，热区限勾选框列，
       // 行主体 Sequence 拖选（只增不减）与勾选框扫选（可加可减）并存互不冲突
       Column() {
         SelectCheckbox({
@@ -1085,7 +1085,7 @@ export struct QueueSheet {
         }
         .width('100%')
 
-        // FR-104：duration 未知（0）不渲染 00:00 占位，只显示 UP 主名
+        // v0-r9 FR-104：duration 未知（0）不渲染 00:00 占位，只显示 UP 主名
         Text(entry.videos[0].duration > 0 ? `${entry.videos[0].ownerName} · ${this.formatTime(entry.videos[0].duration * 1000)}` : entry.videos[0].ownerName)
           .fontSize(Constants.TOKEN_FONT_AUX)
           .fontColor(this.textSecondary())
@@ -1098,14 +1098,14 @@ export struct QueueSheet {
       .layoutWeight(1)
       .margin({ left: Constants.TOKEN_SPACE_10 })
 
-      // 已播标记（US4）：非当前条目且已播完时行尾绿 ✓，对齐 SourcePage NEW 徽标视觉
+      // 已播标记（v0.3-r2 US7）：非当前条目且已播完时行尾绿 ✓，对齐 SourcePage NEW 徽标视觉
       if (this.controller.isPlayed(entry.videos[0].bvid)) {
         SymbolGlyph($r('sys.symbol.checkmark_circle'))
           .fontSize(Constants.TOKEN_FONT_TITLE)
           .fontColor([$r('app.color.success_green')])
           .margin({ left: Constants.TOKEN_SPACE_XS })
       }
-      // 失效标记（v0.7-part3）：行尾红 X（-404 无法取流），与 ✓ 同视觉档可并存；
+      // 失效标记（v0.7-p3）：行尾红 X（-404 无法取流），与 ✓ 同视觉档可并存；
       // 异常标记（感叹号，amber）次之：X 与感叹号防御性共存时 X 优先
       if (this.controller.hasInvalid(entry.videos[0].bvid)) {
         SymbolGlyph($r('sys.symbol.xmark_circle'))
@@ -1173,8 +1173,8 @@ export struct QueueSheet {
 
   build() {
     Stack({ alignContent: Alignment.Top }) {
-      // 单行头部（US1/US4）：标题 + 清空/多选/清除已播三图标；多选态整行替换为多选操作行；
-      // Stack 承载双态条件渲染 + OPACITY 过渡交叉淡化（进出多选同 animateTo 驱动，FR-006）
+      // 单行头部（queue-redesign US1/US4）：标题 + 清空/多选/清除已播三图标；多选态整行替换为多选操作行；
+      // Stack 承载双态条件渲染 + OPACITY 过渡交叉淡化（进出多选同 animateTo 驱动，v0.5-p2-1 FR-006）
       Stack() {
         if (!this.selectMode.value) {
           Row() {
@@ -1240,7 +1240,7 @@ export struct QueueSheet {
           .width('100%')
           .transition(TransitionEffect.OPACITY)
         } else {
-          // 多选操作行（US1/US5）：全选+独立计数 · 移除 · 移到最后 · 下一首播放 · 退出 全部图标化；
+          // 多选操作行（v0.7-p1 US1/US5）：全选+独立计数 · 移除 · 移到最后 · 下一首播放 · 退出 全部图标化；
           // 无选中时 移除/移到最后/下一首播放 三按钮共享禁用（opacity 降档 + enabled false）
           Row() {
             Row() {
@@ -1457,7 +1457,7 @@ export struct QueueSheet {
           List({ space: 0, scroller: this.listScroller }) {
             LazyForEach(this.listSource, (entry: QueueEntry) => {
               ListItem() {
-                // 条目分发渲染（plan D9）：组条目 = Column{ 头行 + ForEach(分P 窄行) } 一体滑动，
+                // 条目分发渲染（queue-multi-p-item plan D9）：组条目 = Column{ 头行 + ForEach(分P 窄行) } 一体滑动，
                 // 单条目沿用整行；外层键 = 条目键，组内键 = 分P 复合键
                 if (entry.isGroup) {
                   Column() {
@@ -1470,7 +1470,7 @@ export struct QueueSheet {
                   this.queueFullRow(entry)
                 }
               }
-              // 条目级横删（plan D6）：组条目整组滑出（组/单删双弹窗），多选态不挂载删除动作
+              // 条目级横删（queue-multi-p-item plan D6）：组条目整组滑出（组/单删双弹窗），多选态不挂载删除动作
               // （左滑手势随 end 缺失整体禁用，退出多选恢复）；删除按钮点击与滑过阈值（onAction）双触发
               .swipeAction(this.selectMode.value ? {} : {
                 end: {
@@ -1492,10 +1492,10 @@ export struct QueueSheet {
           .width('100%')
           .height('100%')
           .id(SWEEP_LIST_ID)
-          // FR-103：alwaysEnabled 使未铺满面板的短队列仍可拖动过冲（写法对齐 SettingsPage 历史面板）
+          // v0-r9 FR-103：alwaysEnabled 使未铺满面板的短队列仍可拖动过冲（写法对齐 SettingsPage 历史面板）
           .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
           .contentStartOffset(this.headerHeight)
-          // 末行逃出 GlassSheet 底部渐隐带（T018）：SHEET_FADE_HEIGHT 渐变叠加罩住列表底部 80px，
+          // 末行逃出 GlassSheet 底部渐隐带（v0.5-p1-1 T018）：SHEET_FADE_HEIGHT 渐变叠加罩住列表底部 80px，
           // end offset 至少盖过带高再留 LIST_BOTTOM_GAP 视觉间距，末行才能完整滚出渐隐区
           .contentEndOffset(Constants.SHEET_FADE_HEIGHT + LIST_BOTTOM_GAP)
           .linearGradientBlur(EDGE_BLUR_RADIUS, {

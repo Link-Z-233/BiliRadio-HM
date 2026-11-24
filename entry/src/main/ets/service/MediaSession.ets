@@ -60,7 +60,7 @@ export class MediaSession {
     }
   }
 
-  // force=true 绕过同曲目去重守卫，供设置开关切换等需要重发同曲目元数据的场景（US5）
+  // force=true 绕过同曲目去重守卫，供设置开关切换等需要重发同曲目元数据的场景（v0-r5 US5）
   async updateTrack(assetId: string, title: string, durationMs: number, coverUrl: string,
     artist: string, force: boolean = false): Promise<void> {
     if (this.session === undefined || assetId === '' || (!force && this.lastAssetId === assetId)) {
@@ -69,7 +69,7 @@ export class MediaSession {
     this.lastAssetId = assetId;
     this.lastDurationMs = durationMs;
     try {
-      // US6：系统播控封面按显示尺寸取图；网络态查询失败按省流档（isWifi 内部捕获异常回 false）
+      // v0-r6 US6：系统播控封面按显示尺寸取图；网络态查询失败按省流档（isWifi 内部捕获异常回 false）
       const wifi: boolean = await NetUtil.isWifi();
       const meta: avSession.AVMetadata = {
         assetId: assetId,

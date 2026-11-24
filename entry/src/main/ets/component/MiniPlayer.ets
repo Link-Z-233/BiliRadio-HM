@@ -3,7 +3,7 @@ import { Constants } from '../service/Constants';
 import { connectBool, connectNum, connectStr, NumState, StrState } from '../service/V2State';
 import { CoverThumb } from './CoverThumb';
 
-// 底部迷你播放条：队列有内容时显示曲目信息，为空时显示占位条（US2）；点按唤起全屏播放层
+// 底部迷你播放条：队列有内容时显示曲目信息，为空时显示占位条（v0-r3 US2）；点按唤起全屏播放层
 @ComponentV2
 export struct MiniPlayer {
   @Local accentColor: StrState =
@@ -15,7 +15,7 @@ export struct MiniPlayer {
   @Local ownerName: string = '';
   @Local playIntent: boolean = false;
 
-  // 进度广播退订句柄（US2/KI-1）：aboutToDisappear 中调用，避免监听器累积
+  // 进度广播退订句柄（v0-r4 US2/KI-1）：aboutToDisappear 中调用，避免监听器累积
   private unsubscribePlayer: () => void = (): void => {};
 
   aboutToAppear(): void {
@@ -125,7 +125,7 @@ export struct MiniPlayer {
         connectBool(Constants.AS_SHOW_PLAYER_OVERLAY, false).value = true;
       })
     } else {
-      // 空态占位条（US2）：队列无内容时显示占位封面+提示，不显示残留歌曲信息；点按无动作（R3 US4）
+      // 空态占位条（v0-r3 US2）：队列无内容时显示占位封面+提示，不显示残留歌曲信息；点按无动作（v0.3-r3 US4）
       Row() {
         CoverThumb({ cover: '', radius: 8 })
         Text('暂无播放内容')

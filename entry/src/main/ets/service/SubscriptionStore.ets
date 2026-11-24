@@ -12,7 +12,7 @@ const SUB_CACHE_PREFIX: string = 'sub_cache_';
 
 export type SubRefreshCallback = (sub: Subscription, ok: boolean) => void;
 
-// 导入结果（v0.6-part3 US3）：新增/跳过计数 + 新源实例（调用方刷新新源用）
+// 导入结果（v0.6-p3 US3）：新增/跳过计数 + 新源实例（调用方刷新新源用）
 export interface ImportResult {
   added: number;
   skipped: number;
@@ -184,7 +184,7 @@ export class SubscriptionStore {
     if (sub.type === Subscription.TYPE_UP) {
       items = await BiliService.fetchUpVideos(sub.sourceId);
       sub.totalCount = BiliService.getUpTotalCount(sub.sourceId);
-      // US2 双链合并取稠：APP 链结果可能稀疏（服务端钳 ps/条目缺失），Web 头页按 bvid 去重补齐；
+      // v0-r7 US2 双链合并取稠：APP 链结果可能稀疏（服务端钳 ps/条目缺失），Web 头页按 bvid 去重补齐；
       // Web 失败仅记日志，退化为 APP 结果（下方统一 sort 保证时序）
       try {
         const webHead: BiliVideo[] = await BiliService.fetchUpWebHead(sub.sourceId);
@@ -263,7 +263,7 @@ export class SubscriptionStore {
     }
   }
 
-  // 导出订阅（v0.6-part3 US2）：全量订阅序列化写 cacheDir 覆盖文件，返回沙箱路径；无订阅返回空串；写失败异常上抛由调用方兜底
+  // 导出订阅（v0.6-p3 US2）：全量订阅序列化写 cacheDir 覆盖文件，返回沙箱路径；无订阅返回空串；写失败异常上抛由调用方兜底
   static exportSubscriptions(): string {
     const list: Subscription[] = SubscriptionStore.loadSubscriptions();
     if (list.length === 0) {
@@ -282,7 +282,7 @@ export class SubscriptionStore {
     return path;
   }
 
-  // 导入订阅（v0.6-part3 US3）：URI 读文本 → 结构校验（非法抛错且现有订阅零改动）→ 逐条容错去重合并 → 落盘
+  // 导入订阅（v0.6-p3 US3）：URI 读文本 → 结构校验（非法抛错且现有订阅零改动）→ 逐条容错去重合并 → 落盘
   static importFromFile(uri: string): ImportResult {
     const text: string = FileUtil.readTextFromUri(uri);
     const root: Record<string, Object> = JSON.parse(text) as Record<string, Object>;

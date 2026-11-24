@@ -1,4 +1,4 @@
-// 多选共享逻辑（FR-012）：Set 引用替换勾选切换 + 长按守卫，订阅源/队列/历史三处共用
+// 多选共享逻辑（v0.5-p2-1 FR-012）：Set 引用替换勾选切换 + 长按守卫，订阅源/队列/历史三处共用
 import { Constants } from './Constants';
 
 export class SelectLogic {
@@ -14,7 +14,7 @@ export class SelectLogic {
   }
 }
 
-// 长按守卫（FR-009）：长按触发置位，随后 ArkUI 回退派发的 onClick 命中即吞掉并复位，
+// 长按守卫（v0.5-p2-1 FR-009）：长按触发置位，随后 ArkUI 回退派发的 onClick 命中即吞掉并复位，
 // 下次按下（TouchType.Down）重置；堵 Sequence 手势组失败后的回退点击取消预选，拖选路径不受影响
 export class LongPressGuard {
   private armed: boolean = false;
@@ -36,7 +36,7 @@ export class LongPressGuard {
   }
 }
 
-// 整行拖选会话（US1 D1 画笔模型）：长按完成时翻转起点行，按翻转后状态锁定画笔方向
+// 整行拖选会话（v0.5-p3 US1 D1 画笔模型）：长按完成时翻转起点行，按翻转后状态锁定画笔方向
 // （原未选→加扫、原已选→减扫）；拖动中每次从拖前快照重算选中集——起点至当前行区间按画笔涂刷、
 // 区间外恢复快照态（拖回即取消），幂等自纠；位移增量含边缘自动滚动位移（同 SweepSession），
 // lastLo/lastHi 缓存已涂区间，区间未变不写回（边缘滚动静止时零渲染压力）；
@@ -108,7 +108,7 @@ export class RowDragSession {
   }
 }
 
-// 拖选会话（FR-014，追加2）：按下采样锁定加/减扫模式（起点行未选=加扫、已选=减扫，同次拖动不反转），
+// 拖选会话（v0.5-p2-1 FR-014，追加2）：按下采样锁定加/减扫模式（起点行未选=加扫、已选=减扫，同次拖动不反转），
 // 记录起点行 index/全局 Y/滚动偏移；位移增量 =（globalY−startGlobalY）+（currentOffset−startScrollOffset），
 // 覆盖边缘自动滚动带来的内容位移；纯类零装饰器，场景侧持实例、手势回调驱动
 export class SweepSession {
@@ -144,7 +144,7 @@ export class SweepSession {
   }
 }
 
-// 边缘自动滚动器（FR-018，追加2）：拖选中手指静止时 Pan 无 update 事件，
+// 边缘自动滚动器（v0.5-p2-1 FR-018，追加2）：拖选中手指静止时 Pan 无 update 事件，
 // 内部 setInterval 时钟驱动 scroller.scrollBy（走列表既有滚动管线，触底 onReachEnd 语义继承），
 // 每帧滚动后回调场景重算扫选；同方向重复 start 幂等（不重置时钟相位），stop 幂等；
 // atEnd 为可选尽头查询（FR-003）：tick 前检查，到顶/到底即停滚清理，缺省不注入时行为不变
