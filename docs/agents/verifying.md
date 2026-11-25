@@ -127,6 +127,7 @@
 5. **网络依赖**：US1/US6/US9 需真实 B 站网络；订阅数据需账号已登录或有既有订阅。无网/未登录时记录 SKIPPED 原因，不算 FAIL
    - B 站风控：订阅源首次抓取可能触发 -352，静默刷新冷却后恢复——测试数据准备预留冷却时间
 6. **每故事结束**：结果（PASS/FAIL/SKIP）+ 尝试次数 + 截图路径（如有）
+7. **测试收尾暂停播放**：全部用例跑完即暂停模拟器/真机上的当前播放（`devecocli ui` 点按暂停键，残留队列先点当前曲暂停）——长测后设备持续出声耗电，残留播放态还污染下轮验证基线；顺带清理本轮验证截图（`.verify/` 等工作区临时截图），不入 git 也不长期滞留
 
 **取证与提速**
 - 应用日志取证直读落盘文件，优先于 UI 翻日志页：`hdc shell "grep -n '<关键字>' /data/app/el2/100/base/com.biliradio.app/haps/entry/files/biliradio_log.txt"` 一条命令定位全部目标行；UI 翻页一次一屏（每屏 10–30s），跨多屏取证成本高一个数量级
@@ -192,5 +193,15 @@
   - `devecocli run` 偶发清空应用数据：一次重部署后 files 目录整体重建（订阅/播放列表/日志全失），下次部署又正常保留——长 UI 验证前先确认测试数据在位（`ls .../files/`），被清时按订阅→点播流程重建，勿当回归排查
   - 队列仅剩一首时长验证中自然播完 → 队列空 → 播放层（overlay+迷你条）自动收起，界面跳回下层页面且无日志报警——长测中途界面「无故」消失先查 `state | completed` 再怀疑改动回归；`uitest` 点击在 sheet 弹出动画期偶发落空（点了无反应），重试一次即中，结论前勿单次点击定生死
   - 面板底色统一比对法：同一背景页（播放页封面）下分别截两面板，System.Drawing 对无文字行距带采样 avgRGB/lumStd，磨砂面板方差 <2、两面板均值差 <1 即视觉一致；系统 bindSheet 默认蒙罩（约 20% 黑）比 GlassSheet 的 mask_heavy（浅色 35% 黑）浅约 5 个灰阶，统一蒙罩用 `maskColor: $r('app.color.mask_heavy')`
+
+- v0.8-p5 音量均衡模拟器实测（build+ui，模拟器）：
+  - `hdc shell` 内 grep 多模式检索：toybox grep 不支持 BRE `\|` 交替（`grep 'a\|b'` 零匹配且不报错，极易误判「日志无目标行」）——多模式一律 `grep -E 'a|b'`；单字面量无影响
+  - PowerShell 双引号内 `$` 被插值吃掉：`hdc shell "sed -n '143,$p' file"` 的 `$p` 当作 PS 变量展开成空 → 设备端报 `sed: bad pattern`——hdc shell 命令含 `$` 时改用 `tail -n +N` 或单引号包整条命令
+  - 离线 API 探针（PowerShell 直连）匿名裸请求 view 首请求即 412（带未激活 buvid3 也 412）：412 即停手勿连发（风控升级梯度），且模拟器/真机与应用共用宿主出口 IP，密集 412 有拖累在测应用链路的风险——API 行为验证优先走应用链（playurl 请求已搭车所需参数，落盘日志即探针结果）
+  - Toggle 开关态像素判定：无障碍树只给 `checkable` 不给 `checked`——对 Toggle bounds 直方图采样：关=灰轨(220,220,220)+白点、开=主题色轨+白点，两态色桶分布稳定可判（配合 preferences 落盘值双确认）
+
+- v0.8-p5 设置页重排模拟器实测（build+ui，模拟器）：
+  - `verify_ui` 工具后端多模态模型 403（InvalidModel）持续不可用时的全程降级路径（纯结构类用例如设置页重排无需视觉模型）：`devecocli ui layout --format json` 断言组行数/顺序/弹层 notice 文本 → 落盘截图 + System.Drawing 像素断言补视觉面（卡内/卡间背景用垂直扫描背景色带判卡边界，Toggle 态用色桶）→ `aa force-stop` + `aa start` 重启后回读断言持久化；断言证据（bounds、色桶分布、dump 摘录）写入报告即可替代截图留存，收尾照常清理 `.verify/`
+
 
 （追加区条目积累后由整理轮整合进第 2/3 节对应板块并清空本区）

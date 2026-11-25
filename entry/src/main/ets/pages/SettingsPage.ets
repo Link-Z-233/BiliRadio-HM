@@ -53,6 +53,8 @@ export struct SettingsPage {
   @Local unfavoriteAskOn: boolean = true;
   // —— 新增设置开关状态 ——
   @Local interruptResume: boolean = false;
+  // 音量均衡开关（v0.8-p5）：读写 KEY_VOLUME_BALANCE（默认关），开启后按服务端响度数据自动归一增益
+  @Local volumeBalanceOn: boolean = false;
   @Local wifiOnlyDownload: boolean = false;
   // —— 音质（audio-quality-settings）：双网络默认档 + 单 sheet 选择器（编辑目标标记）——
   @Local wifiQuality: QualityTier = QualityTier.MAX;
@@ -108,6 +110,7 @@ export struct SettingsPage {
     this.historySyncOn = AppStore.getNumber(Constants.KEY_HISTORY_SYNC, 1) === 1;
     this.unfavoriteAskOn = AppStore.getNumber(Constants.KEY_UNFAVORITE_ASK, 1) === 1;
     this.interruptResume = AppStore.getNumber(Constants.KEY_INTERRUPT_RESUME, 0) === 1;
+    this.volumeBalanceOn = AppStore.getNumber(Constants.KEY_VOLUME_BALANCE, 0) === 1;
     this.wifiOnlyDownload = AppStore.getNumber(Constants.KEY_WIFI_ONLY_DOWNLOAD, 0) === 1;
     this.singleInsertNext = AppStore.getNumber(Constants.KEY_SINGLE_INSERT_NEXT, 0) === 1;
     this.wifiQuality = this.readStoredTier(Constants.KEY_WIFI_AUDIO_QUALITY, QualityTier.MAX);
@@ -1161,12 +1164,28 @@ export struct SettingsPage {
                       AppStore.putNumber(Constants.KEY_UNFAVORITE_ASK, isOn ? 1 : 0);
                     }
                   })
+                  // 音质提示归位账号组卡内底部（v0.8-p5 US4 FR-009）：本质是登录/会员态说明，非会员展示
+                  if (BiliSession.getInstance().vipStatus !== 1) {
+                    Text('192K/Hi-Res/杜比需大会员')
+                      .fontSize(Constants.TOKEN_FONT_BODY_S)
+                      .fontColor(this.accentColor.value)
+                      .width('100%')
+                      .textAlign(TextAlign.Start)
+                      .padding({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_L, top: Constants.TOKEN_SPACE_XS, bottom: Constants.TOKEN_SPACE_10 })
+                  }
                 } else {
                   this.loginControls()
                   Divider()
                     .color($r('app.color.track_color'))
                     .margin({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_L })
                   this.cookieBlock()
+                  // 音质提示归位账号组卡内最底（v0.8-p5 US4 FR-009）：该分支必然非冷启动占位且未登录
+                  Text('未登录时最高 64K，登录后可用更高音质')
+                    .fontSize(Constants.TOKEN_FONT_BODY_S)
+                    .fontColor(this.accentColor.value)
+                    .width('100%')
+                    .textAlign(TextAlign.Start)
+                    .padding({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_L, top: Constants.TOKEN_SPACE_XS, bottom: Constants.TOKEN_SPACE_10 })
                 }
               }
 
@@ -1215,6 +1234,30 @@ export struct SettingsPage {
                   }
                 })
                 ListRow({
+                  title: '音量均衡',
+                  subtitle: '自动平衡不同视频间的音量大小',
+                  showToggle: true,
+                  toggleOn: this.volumeBalanceOn,
+                  showDivider: true,
+                  toggleChange: (isOn: boolean): void => {
+                    this.volumeBalanceOn = isOn;
+                    AppStore.putNumber(Constants.KEY_VOLUME_BALANCE, isOn ? 1 : 0);
+                    this.controller.setVolumeBalance(isOn);
+                  }
+                })
+                ListRow({
+                  title: '单集插入位置',
+                  valueText: this.singleInsertLabel(),
+                  showArrow: true,
+                  rowAction: (): void => {
+                    this.showSingleInsertSheet = true;
+                  }
+                })
+              }
+
+              // 网络设置组（v0.8-p5 US4 FR-010）：按网络分类的音质与播放策略自「播放设置」析出
+              SettingsGroup({ title: '网络设置' }) {
+                ListRow({
                   title: 'Wi-Fi 默认音质',
                   valueText: AudioQuality.label(AudioQuality.clampTier(this.wifiQuality, this.isLogged, BiliSession.getInstance().vipStatus)),
                   showArrow: true,
@@ -1232,38 +1275,14 @@ export struct SettingsPage {
                     this.openQualitySheet('cellular');
                   }
                 })
-                if (!this.isLogged) {
-                  Text('未登录时最高 64K，登录后可用更高音质')
-                    .fontSize(Constants.TOKEN_FONT_BODY_S)
-                    .fontColor(this.accentColor.value)
-                    .width('100%')
-                    .textAlign(TextAlign.Start)
-                    .padding({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_L, top: Constants.TOKEN_SPACE_XS, bottom: Constants.TOKEN_SPACE_10 })
-                } else if (BiliSession.getInstance().vipStatus !== 1) {
-                  Text('192K/Hi-Res/杜比需大会员')
-                    .fontSize(Constants.TOKEN_FONT_BODY_S)
-                    .fontColor(this.accentColor.value)
-                    .width('100%')
-                    .textAlign(TextAlign.Start)
-                    .padding({ left: Constants.TOKEN_SPACE_L, right: Constants.TOKEN_SPACE_L, top: Constants.TOKEN_SPACE_XS, bottom: Constants.TOKEN_SPACE_10 })
-                }
                 ListRow({
                   title: '仅在 Wi-Fi 环境播放',
                   subtitle: '非 Wi-Fi 网络播放需手动确认',
                   showToggle: true,
                   toggleOn: this.wifiOnlyDownload,
-                  showDivider: true,
                   toggleChange: (isOn: boolean): void => {
                     this.wifiOnlyDownload = isOn;
                     AppStore.putNumber(Constants.KEY_WIFI_ONLY_DOWNLOAD, isOn ? 1 : 0);
-                  }
-                })
-                ListRow({
-                  title: '单集插入位置',
-                  valueText: this.singleInsertLabel(),
-                  showArrow: true,
-                  rowAction: (): void => {
-                    this.showSingleInsertSheet = true;
                   }
                 })
               }

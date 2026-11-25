@@ -7,7 +7,7 @@ import { MediaSession } from './MediaSession';
 import { SleepTimerController } from './SleepTimerController';
 import { BiliVideo } from '../model/BiliVideo';
 import { PlayHistoryItem } from '../model/PlayHistoryItem';
-import { AudioTrack, AudioQuality, QualityTier, ResolvedAudio } from '../model/AudioQuality';
+import { AudioTrack, AudioQuality, LoudnessData, QualityTier, ResolvedAudio } from '../model/AudioQuality';
 
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -120,6 +120,8 @@ export class PlayerController {
   private currentCid: number = 0;          // 当前曲目 cid（切档零额外视频信息请求）
   // 最近一次取流请求档位：网络稳定切换目标档与之相同则跳过（避免无谓换流中断）
   private currentRequestedTier: QualityTier = QualityTier.MAX;
+  // 当前曲目响度数据（v0.8-p5）：随每次 resolve 刷新，不缓存跨曲目；开关按需读 AppStore 不镜像（plan D6）
+  private currentLoudness: LoudnessData | undefined = undefined;
   // 当前网络是否 Wi-Fi（v0-r6 US6）：由 watchStableNetworkType 回调与 init 一次性查询共同维护
   private wifiNow: boolean = false;
 
@@ -959,6 +961,44 @@ export class PlayerController {
     return AudioQuality.fromStored(AppStore.getNumber(key, -1));
   }
 
+  // 音量均衡开关按需读取（v0.8-p5 plan D6）：消费点唯一（播放链），不镜像进内存广播字段
+  private isVolumeBalanceEnabled(): boolean {
+    return AppStore.getNumber(Constants.KEY_VOLUME_BALANCE, 0) === 1;
+  }
+
+  // 增益计算（v0.8-p5 plan D3）：开关关/无数据→0，开启且有数据→computeGainDb（守卫在内）；
+  // 跳过原因日志各自可区分（无数据 / 可疑测量）
+  private computeVolumeGainDb(): number {
+    if (!this.isVolumeBalanceEnabled()) {
+      return 0;
+    }
+    const loudness: LoudnessData | undefined = this.currentLoudness;
+    if (loudness === undefined) {
+      Logger.log('player', 'volumeBalance skip', 'no loudness data');
+      return 0;
+    }
+    const gain: number = LoudnessData.computeGainDb(loudness);
+    if (gain === 0 && loudness.measuredI < loudness.undersizedTargetI) {
+      Logger.log('player', 'volumeBalance skip',
+        `undersized measuredI=${loudness.measuredI} < ${loudness.undersizedTargetI}`);
+    } else {
+      Logger.log('player', 'volumeBalance gain',
+        `gain=${gain.toFixed(2)}dB measuredI=${loudness.measuredI} targetI=${loudness.targetI}`);
+    }
+    return gain;
+  }
+
+  // 设置页开关回调唯一入口（v0.8-p5 FR-005）：按 currentLoudness 重算并即时应用，
+  // 零重取流（响度数据已随取流在手）；换档在途同步旁路实例，交接后增益不丢不错配
+  setVolumeBalance(enabled: boolean): void {
+    Logger.log('player', 'setVolumeBalance', `enabled=${enabled ? 1 : 0}`);
+    const gain: number = this.computeVolumeGainDb();
+    this.player.setLoudnessGainDb(gain);
+    if (this.standbyPlayer !== undefined) {
+      this.standbyPlayer.setLoudnessGainDb(gain);
+    }
+  }
+
   async loadPlaylistAndPlay(items: BiliVideo[], startIndex: number,
     insertAfterCurrent: boolean = false, allowInteractive: boolean = false): Promise<EnqueueResult> {
     // 追加去重：按复合键（bvid+page，占位 0≡1）过滤掉已在歌单中的项，避免重复；
@@ -1159,6 +1199,8 @@ export class PlayerController {
     this.currentQualityCode = 0;
     this.currentTrackSource = '';
     this.currentCid = 0;
+    // 响度数据复位（v0.8-p5）：切剧期间不残留上一首的增益计算依据
+    this.currentLoudness = undefined;
     // 云端心跳复位（v0.5-p1-1 US1）：切分P/重新起播重置上报水位与熔断计数，新分P 重新计
     this.heartbeatLastSentSec = 0;
     this.heartbeatFailCount = 0;
@@ -1252,9 +1294,12 @@ export class PlayerController {
       this.currentQualityCode = result.id;
       this.currentTrackSource = result.source;
       this.currentRequestedTier = tier;
+      this.currentLoudness = result.loudness;
       Logger.log('player', 'playIndex quality',
         `tier=${Number(tier)} qn=${result.id} source=${result.source} tracks=${result.tracks.length}`);
       this.emitUi();
+      // 响度增益前置（v0.8-p5）：openStreamWithRetry 前存进期望值，prepared 时统一落地
+      this.player.setLoudnessGainDb(this.computeVolumeGainDb());
       await this.openStreamWithRetry(this.player, result.urls);
       if (token !== this.loadToken) {
         return;
@@ -1682,6 +1727,10 @@ export class PlayerController {
         this.discardStandby(standby);
         return;
       }
+      // 换档旁路响度增益前置（v0.8-p5 FR-007）：同一曲目响度随新 resolve 刷新，
+      // openStreamWithRetry(standby) 前存进期望值，旁路 prepared 时落地，交接后增益不丢不错配
+      this.currentLoudness = result.loudness;
+      standby.setLoudnessGainDb(this.computeVolumeGainDb());
       await this.openStreamWithRetry(standby, result.urls);
       if (token !== this.loadToken) {
         this.discardStandby(standby);

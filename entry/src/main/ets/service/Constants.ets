@@ -52,6 +52,8 @@ export class Constants {
   static readonly KEY_INVALID_BVIDS: string = 'invalidBvids';
   // 单集插入位置（1=下一首播放 0=添加至队列末，默认添加至队列末；仅源页单击入队路径生效）
   static readonly KEY_SINGLE_INSERT_NEXT: string = 'singleInsertNext';
+  // 音量均衡开关持久化键（v0.8-p5，1=开 0=关，默认关）：开启后按 B 站服务端响度数据自动归一增益
+  static readonly KEY_VOLUME_BALANCE: string = 'volumeBalance';
 
   // —— AppStorage 键 ——
   static readonly AS_COLOR_MODE_SETTING: string = 'colorModeSetting';

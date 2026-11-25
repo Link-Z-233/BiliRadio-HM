@@ -36,7 +36,7 @@ entry/src/main/ets/
 | `HomePage.ets` | 首页订阅源列表（新集徽标 / 长按进排序编辑态拖拽调序 / 左滑删除 / 空态）；列表底缘永久让位 MiniPlayer（v0.7-part2-refresh-share 起，原「内容从胶囊下穿过」设计废止）；把手拖拽边缘自动滚动（EdgeAutoScroller 复用）；静默刷新 CD 门/新集增量 toast；分享导入消费门控（extractBiliUrl 开面板 / 拒收 toast） |
 | `SourcePage.ets` | 订阅源详情（剧集列表 / 多选 / 刷新 / fav 入队 stamp 与归属回填） |
 | `PlayerOverlay.ets` | 播放浮层（封面取色 / 音质档位 / 倍速） |
-| `SettingsPage.ets` | 设置页（分组最终态：账号组含历史同步/取消收藏提醒与用户行「登出」胶囊；播放历史独立无标题卡片；播放设置；外观（色板行均匀分布）；系统组含订阅管理合并行 + 日志入口与关于；滚动底部净空对齐 LogPage 覆盖层模式） |
+| `SettingsPage.ets` | 设置页（分组最终态：账号组含历史同步/取消收藏提醒与用户行「登出」胶囊，卡内底部音质提示按登录/会员态展示（v0.8-p5 US4 归位：未登录 64K / 非会员大会员提示，会员与冷启动占位无）；播放历史独立无标题卡片；播放设置四行（启动时自动播放 / 后台打断续播 / 音量均衡开关（volume-balance，切换即时生效）/ 单集插入位置）；网络设置组三行（Wi-Fi 与移动网络默认音质、仅在 Wi-Fi 环境播放，v0.8-p5 US4 自播放设置析出）；外观（色板行均匀分布）；系统组含订阅管理合并行 + 日志入口与关于；滚动底部净空对齐 LogPage 覆盖层模式） |
 | `LogPage.ets` | 日志页（L2 层；导出 / 清空 / 分类过滤） |
 | `AddSubscriptionSheet.ets` | 添加订阅面板（链接识别 / UID / UP / 合集 / 收藏夹 / 分享导入 initialInput 灌入自动检索） |
 
@@ -60,8 +60,8 @@ entry/src/main/ets/
 
 | 文件 | 职责 |
 |------|------|
-| `PlayerController.ets` | 播控中枢（播放 / 队列 / 订阅收藏编排 / 队列移除联动取消收藏拦截与确认回调；音质换档双播放器旁路交接——旧实例全程出声、新档经 standbyPlayer 旁路预载就绪后停旧换新，standbyPlayer 字段为在途换档唯一归口、全部丢弃点统一释放，失败释放旁路保旧流不打断；取流失败分类分发 + 失效 invalidSet（红 X）/ 异常 anomalySet（橙感叹号）双标记集；零装饰器广播） |
-| `AudioPlayer.ets` | media.AVPlayer 音频播放封装 |
+| `PlayerController.ets` | 播控中枢（播放 / 队列 / 订阅收藏编排 / 队列移除联动取消收藏拦截与确认回调；音质换档双播放器旁路交接——旧实例全程出声、新档经 standbyPlayer 旁路预载就绪后停旧换新，standbyPlayer 字段为在途换档唯一归口、全部丢弃点统一释放，失败释放旁路保旧流不打断；音量均衡增益应用（volume-balance）：`currentLoudness` 随 resolve 刷新、开关按需读 AppStore、`setVolumeBalance` 即时重算应用（含在途旁路实例）；取流失败分类分发 + 失效 invalidSet（红 X）/ 异常 anomalySet（橙感叹号）双标记集；零装饰器广播） |
+| `AudioPlayer.ets` | media.AVPlayer 音频播放封装；响度增益期望值机制（volume-balance，desiredRate 同款：`setLoudnessGainDb` 存期望、prepared 统一应用、已 prepared 即时应用、失败静默日志期望值保留） |
 | `MediaSession.ets` | avSession 系统播控（锁屏 / 控制中心）+ 后台长驻任务 |
 | `SleepTimerController.ets` | 睡眠定时（定时暂停 / 播完暂停） |
 
@@ -69,7 +69,7 @@ entry/src/main/ets/
 
 | 文件 | 职责 |
 |------|------|
-| `BiliService.ets` | B 站 API 网关（全部端点、取流、音质解析；API 知识查 BILI_NOTES.md） |
+| `BiliService.ets` | B 站 API 网关（全部端点、取流、音质解析；playurl 恒携 `voice_balance=1` 并解析 `data.volume` 为 LoudnessData（volume-balance）；API 知识查 BILI_NOTES.md） |
 | `BiliSession.ets` | 登录会话（cookie 持有 / 校验） |
 | `AppSigner.ets` | APP 签名（TV appkey MD5 键序，UP 投稿取链） |
 | `WbiSigner.ets` | WBI 签名（polymer 合集/追更接口鉴权） |
@@ -107,7 +107,7 @@ entry/src/main/ets/
 | 文件 | 职责 |
 |------|------|
 | `BiliVideo.ets` | 视频条目（`@ObservedV2`，多分P 经 audio 分P 页兼容；`folderOwnerMid` 收藏夹主人归属） |
-| `AudioQuality.ets` | 音质档位枚举（QualityTier）+ AudioTrack 音轨 + 静态映射工具 |
+| `AudioQuality.ets` | 音质档位枚举（QualityTier）+ AudioTrack 音轨 + LoudnessData 响度数据（volume-balance：解析/增益公式与守卫静态工具，区间常量类内定义免依赖 Constants）+ 静态映射工具 |
 | `PlayHistoryItem.ets` | 播放历史条目（progress/duration 秒；-1 已看完） |
 | `Subscription.ets` | 订阅源（四类源统一为定期拉取剧集列表的播客频道；fav 源含 `folderOwnerMid/folderOwnerName` 归属字段） |
 | `Season.ets` | 合集 / 剧集元数据 |

@@ -4,7 +4,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BiliVideo } from '../model/BiliVideo';
 import { FavFolder } from '../model/FavFolder';
 import { Season } from '../model/Season';
-import { AudioTrack, QualityTier, ResolvedAudio } from '../model/AudioQuality';
+import { AudioTrack, LoudnessData, QualityTier, ResolvedAudio } from '../model/AudioQuality';
 import { BiliSession } from './BiliSession';
 import { Constants, sleep } from './Constants';
 import { WbiSigner } from './WbiSigner';
@@ -99,17 +99,20 @@ class UpAppPage {
   hasNext: boolean = false;
 }
 
-// playurl 响应解析载体（v0.5-p1-2）：业务数据 + 云端播放进度（last_play_time，毫秒）
+// playurl 响应解析载体（v0.5-p1-2）：业务数据 + 云端播放进度（last_play_time，毫秒）；
+// loudness 为服务端响度数据（v0.8-p5，voice_balance=1 恒携带，无 volume 时 undefined）
 class DashFetchResult {
   tracks: AudioTrack[] = [];
   lastPlayTimeMs: number = 0;
   lastPlayCid: number = 0;
+  loudness: LoudnessData | undefined = undefined;
 }
 
 class DurlFetchResult {
   urls: string[] = [];
   lastPlayTimeMs: number = 0;
   lastPlayCid: number = 0;
+  loudness: LoudnessData | undefined = undefined;
 }
 
 const upAppCursorCache: Map<number, UpAppCursor> = new Map<number, UpAppCursor>();
@@ -1967,8 +1970,9 @@ export class BiliService {
   // 常规 dash.audio[] 全量 + flac.audio 单对象（赋 id=30251）+ dolby.audio 数组（赋 id=30250）合并统一列表，
   // 按 bandwidth 降序、同 id 保留高带宽（排序后取首个）去重；无 dash 或音轨为空抛错
   static async fetchDashAudioTracks(bvid: string, cid: number): Promise<DashFetchResult> {
+    // voice_balance=1 与开关解耦恒携带（v0.8-p5 plan D1）：响应才下发 data.volume
     const resultStr: string = await httpGet(
-      `${BILI_PLAY_URL_API}?bvid=${bvid}&cid=${cid}&qn=16&fnver=0&fnval=4048&fourk=0`
+      `${BILI_PLAY_URL_API}?bvid=${bvid}&cid=${cid}&qn=16&fnver=0&fnval=4048&fourk=0&voice_balance=1`
     );
     const data: Record<string, Object> = parseApiData(resultStr);
     if (data['dash'] === undefined || data['dash'] === null) {
@@ -2012,6 +2016,12 @@ export class BiliService {
     }
     const result: DashFetchResult = new DashFetchResult();
     result.tracks = deduped;
+    const volumeRaw: Object = data['volume'];
+    result.loudness = LoudnessData.parseVolume(volumeRaw);
+    // 解析失败与缺失日志可区分（v0.8-p5 plan 日志契约），真机命中率回填依赖
+    if (volumeRaw !== undefined && volumeRaw !== null && result.loudness === undefined) {
+      Logger.log('player', 'volumeBalance skip', 'volume malformed');
+    }
     const lptRaw: Object = data['last_play_time'];
     if (lptRaw !== undefined && lptRaw !== null) {
       result.lastPlayTimeMs = lptRaw as number;
@@ -2025,8 +2035,9 @@ export class BiliService {
   }
 
   static async fetchDurlCandidates(bvid: string, cid: number): Promise<DurlFetchResult> {
+    // voice_balance=1 同参同解析（v0.8-p5 plan D8）：durl 兜底内容有机会同样获得均衡
     const resultStr: string = await httpGet(
-      `${BILI_PLAY_URL_API}?bvid=${bvid}&cid=${cid}&qn=16&fnver=0&fnval=0&fourk=0`
+      `${BILI_PLAY_URL_API}?bvid=${bvid}&cid=${cid}&qn=16&fnver=0&fnval=0&fourk=0&voice_balance=1`
     );
     const data: Record<string, Object> = parseApiData(resultStr);
     if (data['durl'] === undefined) {
@@ -2058,6 +2069,11 @@ export class BiliService {
     }
     const result: DurlFetchResult = new DurlFetchResult();
     result.urls = candidates;
+    const volumeRaw: Object = data['volume'];
+    result.loudness = LoudnessData.parseVolume(volumeRaw);
+    if (volumeRaw !== undefined && volumeRaw !== null && result.loudness === undefined) {
+      Logger.log('player', 'volumeBalance skip', 'volume malformed');
+    }
     const lptRaw: Object = data['last_play_time'];
     if (lptRaw !== undefined && lptRaw !== null) {
       result.lastPlayTimeMs = lptRaw as number;
@@ -2106,17 +2122,20 @@ export class BiliService {
 
   // 档位化取流（audio-quality-settings）：dash 全量解析失败→原参数重试一次→
   // 仍失败走既有 durl 降级链，包装为 id=0 的兜底轨道（无档位概念）；
-  // last_play_time/last_play_cid（云端进度，last_play_time 毫秒）随两链响应解析汇聚进 ResolvedAudio
+  // last_play_time/last_play_cid（云端进度，last_play_time 毫秒）与 loudness（响度数据，
+  // v0.8-p5）随两链响应解析汇聚进 ResolvedAudio
   static async resolveAudioTrack(bvid: string, cid: number, tier: QualityTier): Promise<ResolvedAudio> {
     let tracks: AudioTrack[] = [];
     let dashResolved: boolean = false;
     let lastPlayTimeMs: number = 0;
     let lastPlayCid: number = 0;
+    let loudness: LoudnessData | undefined = undefined;
     try {
       const dashResult: DashFetchResult = await BiliService.fetchDashAudioTracks(bvid, cid);
       tracks = dashResult.tracks;
       lastPlayTimeMs = dashResult.lastPlayTimeMs;
       lastPlayCid = dashResult.lastPlayCid;
+      loudness = dashResult.loudness;
       dashResolved = true;
     } catch (e) {
       const firstErr = e as BusinessError;
@@ -2127,6 +2146,7 @@ export class BiliService {
         tracks = dashRetry.tracks;
         lastPlayTimeMs = dashRetry.lastPlayTimeMs;
         lastPlayCid = dashRetry.lastPlayCid;
+        loudness = dashRetry.loudness;
         dashResolved = true;
       } catch (e2) {
         const secondErr = e2 as BusinessError;
@@ -2139,10 +2159,11 @@ export class BiliService {
       const track: AudioTrack = BiliService.pickAudioTrack(tracks, tier);
       Logger.log('player', 'resolveAudioTrack',
         `bvid=${bvid} cid=${cid} tier=${Number(tier)} qn=${track.id} tracks=${tracks.length} source=dash`);
-      return new ResolvedAudio(track.id, track.urls, tracks, 'dash', lastPlayTimeMs, lastPlayCid);
+      return new ResolvedAudio(track.id, track.urls, tracks, 'dash', lastPlayTimeMs, lastPlayCid, loudness);
     }
     const durlResult: DurlFetchResult = await BiliService.fetchDurlCandidates(bvid, cid);
     Logger.log('player', 'resolveAudioTrack', `bvid=${bvid} cid=${cid} tier=${Number(tier)} source=durl`);
-    return new ResolvedAudio(0, durlResult.urls, [], 'durl', durlResult.lastPlayTimeMs, durlResult.lastPlayCid);
+    return new ResolvedAudio(0, durlResult.urls, [], 'durl',
+      durlResult.lastPlayTimeMs, durlResult.lastPlayCid, durlResult.loudness);
   }
 }

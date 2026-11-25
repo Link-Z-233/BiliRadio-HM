@@ -16,6 +16,9 @@ export class AudioPlayer {
   private _duration: number = 0;
   private _isPrepared: boolean = false;
   private desiredRate: number = 1.0;
+  // 期望响度增益 dB（v0.8-p5，desiredRate 同款机制）：setLoudnessGain 仅
+  // prepared/playing/paused/completed/stopped 态可调，故存期望值、prepared 时统一应用
+  private desiredLoudnessGainDb: number = 0;
   // 实例代际号（v0-r2 US2）：每次重建/销毁递增；setupCallbacks 捕获当代代际，
   // 回调先比对代际再更新共享状态，杜绝旧实例残余事件（timeUpdate/stateChange 等）串扰新剧集
   private generation: number = 0;
@@ -42,6 +45,7 @@ export class AudioPlayer {
           try {
             this.avPlayer.setPlaybackRate(this.desiredRate);
           } catch (e) {}
+          this.applyLoudnessGain();
         }
       } else if (state === 'playing') {
         this._isPlaying = true;
@@ -219,6 +223,30 @@ export class AudioPlayer {
       try {
         this.avPlayer.setPlaybackRate(rate);
       } catch (e) {}
+    }
+  }
+
+  // 期望响度增益入口（v0.8-p5）：存期望；已 prepared 立即应用（开关即时生效），
+  // 未 prepared 由 prepared 事件落地（新曲起播/重建路径）
+  setLoudnessGainDb(db: number): void {
+    this.desiredLoudnessGainDb = db;
+    if (this.avPlayer !== undefined && this._isPrepared) {
+      this.applyLoudnessGain();
+    }
+  }
+
+  // 应用期望增益（v0.8-p5 FR-006）：失败静默记日志、期望值保留（下次 prepared 重试），不影响播放
+  private applyLoudnessGain(): void {
+    if (this.avPlayer === undefined) {
+      return;
+    }
+    try {
+      this.avPlayer.setLoudnessGain(this.desiredLoudnessGainDb).catch((err: BusinessError): void => {
+        hilog.warn(Constants.LOG_DOMAIN, Constants.LOG_TAG,
+          'setLoudnessGain failed: %{public}d %{public}s', err.code, err.message);
+      });
+    } catch (e) {
+      hilog.warn(Constants.LOG_DOMAIN, Constants.LOG_TAG, 'setLoudnessGain sync failed');
     }
   }
 

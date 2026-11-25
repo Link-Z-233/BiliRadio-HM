@@ -498,3 +498,24 @@ csrf 用**新** bili_jct。落盘前必须 nav 验证（本项目现有事务）
 
 **PC asar chunk 参考价值**：MineFavorite/FavoriteVideos 仅为收藏夹列表/收藏对话框组件，只读 `attr` bit0（私密），无行级角标逻辑——PC 端对 fav 角标设计无参考价值。
 
+### 3.14 playurl voice_balance 参数与 volume 响应对象（音量均衡前置探针）
+
+**探针**（2026-11-25，匿名 PC 出口，标准浏览器头，间隔 ≥3s 低密度）：
+
+- `x/player/playurl`（fnval=4048）**不带 `voice_balance` → 响应无 volume 字段**；带 `voice_balance=1` → `data.volume` 完整下发，**匿名即可、无需登录态**
+- **三样本命中情况**（均含完整 `multi_scene_args`）：
+  - BV1GJ411x7h7（2019 MV，cid 137649199）：`measured_i=-13.5, measured_lra=5.3, measured_tp=1.1, measured_threshold=-23.6, target_offset=0.5, target_i=-14, target_tp=-1` → gain=-0.5 dB
+  - BV1esyZz7ExF（2026 热门游戏 PV，cid 43904206928）：`measured_i=-7.4, measured_lra=14.4, measured_tp=5.5, measured_threshold=-18.5, target_offset=-0.1, target_i=-14, target_tp=-1` → gain=-6.6 dB（典型过响内容，均衡价值实证）
+  - av170001（2010 老视频「Хоп」，cid 279786）：playurl **-400**（fnval=4048 与 fnval=0 均 -400，pagelist 正常 code=0）——个案异常，未能验证老视频 volume 形态
+- `multi_scene_args`（map，值为字符串）web 端点同样下发——PiliPlus 的 Volume 模型注释掉该字段非因 web 不下发；固定值 `high_dynamic_target_i=-24 / normal_target_i=-14 / undersized_target_i=-28`
+- **防削波注意**：样本一 `measured_tp=1.1` 配 gain=-0.5 后峰值 0.6 dBFS 仍越 0 dBFS——`gain = target_i − measured_i` 不保证峰值落回 target_tp 内（样本二落回属巧合），增益应用侧需峰值钳制（gain 不使 `measured_tp + gain > 0`）或接受源内既有削波
+- 官方实现对照（安卓 dex / PC asar / PiliPlus 三方实证）：数据源同为 volume 对象；官方安卓 ijkplayer 系 FFmpeg loudnorm 滤镜链（dex 字符串表 `aresample=ochl=stereo:resampler=soxr,ijkloudnorm=measured_i=`）；官方 PC Web Audio GainNode 静态增益 `gain_dB = targetI(模式) − measuredI`（标准取 normal_target_i / 高动态取 high_dynamic_target_i，`measuredI < undersized_target_i` 跳过，15ms 平滑过渡）；PiliPlus mpv `lavfi-complex` 挂 FFmpeg loudnorm（linear 单遍，服务器无配置时本地 fallback 预设，仅安卓启用）
+- bilibili-API-collect `recommend.md` 早已收录 `voice_balance` 参数（「音量均衡？默认为1」）但 playurl 文档未收录 volume 响应对象——社区文档滞后，以本节实测为准
+- **未实测项**：① av170001 -400 根因（2010 老视频个案 or 老视频普遍形态，兜底静默不增益已覆盖）；② 老视频 volume 命中率（换更近的老样本如 2013-2016 待验）；③ durl 兜底链（fnval=0）正常样本是否下发 volume；④ 充电专属等门禁稿的 volume 形态；⑤ 全库命中率统计（真机日志回填）
+
+**应用链路实测回填**（2026-11-25 晚，BiliRadio 模拟器全链路，playurl 全程 HTTP 200）：
+
+- **volume 命中率 5/5**（取流样本全部下发 volume）：我爱上班（2026）measured_i=-11.9→gain=-2.10；绝区零 P1 measured_i=-7.4→gain=-6.60（与探针样本二锚点一致）；P2 measured_i=-8.3→gain=-5.70；P3 measured_i=-8.1→gain=-5.90；Rick Astley MV（2019）measured_i=-13.5→gain=-0.50（与探针样本一锚点一致）；换档重取流（setQualityTier 旁路）与顺序切歌自动换曲同样命中。**volume 按 cid 逐 P 测量**（同稿 P1/P2/P3 measured_i 各异：-7.4/-8.3/-8.1），非视频级单值
+- **skip 原因实测**：`skip | no loudness data` 在「开启开关时无已解析曲目」场景（currentLoudness 空）触发；「取流响应缺 volume / 形态异常」场景未触发（全部样本命中）；undersized 守卫未触发（样本 measured_i 均 > -28）。未实测项②仍未验证（无 2013-2016 样本入链），③ durl 未触发（全样本 source=dash）
+- **离线探针 412 坑**：同日晚间本机 PowerShell 匿名裸请求 view（浏览器头，仅带 SPI buvid3/buvid4、未 ExClimbWuzhi 激活）**首请求即 412**——§1「buvid 激活后才可过部分风控」对 view 裸请求同样成立（「view 最松」有暖场前提）；离线探针须先复刻 BiliSession 暖场链，否则直接走应用链实测（应用链带暖场 playurl 全 200）
+
